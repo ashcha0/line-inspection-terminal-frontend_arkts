@@ -1,5 +1,7 @@
 {
   "src": [
+    "pages/InitView",
+    "pages/TaskView",
     "pages/Index"
   ]
 }
