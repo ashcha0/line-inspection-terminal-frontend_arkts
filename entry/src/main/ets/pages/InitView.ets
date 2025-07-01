@@ -228,6 +228,25 @@ struct InitView {
     this.startSystemCheck();
   }
 
+  // 跳过系统自检（测试用）
+  skipSystemCheck() {
+    this.isChecking = false;
+    // 将所有检查项设置为成功状态
+    const newCheckItems: CheckItem[] = [];
+    for (let i = 0; i < this.checkItems.length; i++) {
+      const item = this.checkItems[i];
+      const newItem: CheckItem = {
+        id: item.id,
+        name: item.name,
+        status: CheckStatus.SUCCESS,
+        solution: item.solution
+      };
+      newCheckItems.push(newItem);
+    }
+    this.checkItems = newCheckItems;
+    this.allChecksPassed = true;
+  }
+
   build() {
     Stack({ alignContent: Alignment.Center }) {
       // 主内容
@@ -330,6 +349,15 @@ struct InitView {
           .backgroundColor('#ffffff')
           .border({ width: 1, color: '#dddddd' })
           .onClick(() => this.openSettings())
+
+          // 跳过自检按钮（测试用）
+          Button('跳过自检')
+            .fontSize(12)
+            .fontColor('#ffffff')
+            .backgroundColor('#ff6b6b')
+            .border({ width: 1, color: '#ff6b6b' })
+            .enabled(!this.allChecksPassed)
+            .onClick(() => this.skipSystemCheck())
 
           // 进入系统按钮
           Button('进入系统')
