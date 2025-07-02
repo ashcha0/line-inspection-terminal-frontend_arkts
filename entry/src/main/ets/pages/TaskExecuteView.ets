@@ -75,7 +75,8 @@ struct TaskExecuteView {
       this.loadCameras();
       this.startStatusPolling();
       this.startFlawPolling();
-      this.startCameraPolling();
+      // 移除摄像头轮询，改为手动刷新
+      // this.startCameraPolling();
     }
   }
 
@@ -192,11 +193,12 @@ struct TaskExecuteView {
     }, 3000); // 每3秒检查一次故障
   }
 
-  startCameraPolling() {
-    this.cameraTimer = setInterval(() => {
-      this.checkCameraConnection();
-    }, 10000); // 每10秒检查一次摄像头连接状态
-  }
+  // 移除自动摄像头轮询，改为手动刷新
+  // startCameraPolling() {
+  //   this.cameraTimer = setInterval(() => {
+  //     this.checkCameraConnection();
+  //   }, 10000); // 每10秒检查一次摄像头连接状态
+  // }
 
   stopPolling() {
     if (this.statusTimer !== -1) {
@@ -207,10 +209,11 @@ struct TaskExecuteView {
       clearInterval(this.flawTimer);
       this.flawTimer = -1;
     }
-    if (this.cameraTimer !== -1) {
-      clearInterval(this.cameraTimer);
-      this.cameraTimer = -1;
-    }
+    // 移除摄像头定时器相关逻辑
+    // if (this.cameraTimer !== -1) {
+    //   clearInterval(this.cameraTimer);
+    //   this.cameraTimer = -1;
+    // }
   }
 
   async updateVehicleStatus() {
@@ -462,6 +465,81 @@ struct TaskExecuteView {
     }
   }
 
+  /**
+   * 手动刷新摄像头列表
+   */
+  async refreshCameraList() {
+    try {
+      console.info('[TaskExecuteView] 🔄 手动刷新摄像头列表');
+      
+      // 显示加载提示
+      setTimeout(() => {
+        try {
+          promptAction.showToast({
+            message: '正在刷新摄像头列表...',
+            duration: 1500
+          });
+        } catch (toastError) {
+          console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+        }
+      }, 0);
+      
+      // 重新获取摄像头列表
+      const newCameras = await CameraService.getCameraInfoList();
+      const oldCameraCount = this.cameras.length;
+      this.cameras = newCameras;
+      
+      // 检查摄像头连接状态
+      await this.checkCameraConnection();
+      
+      const logInfo: CameraLoadLogInfo = {
+        cameraCount: this.cameras.length,
+        cameras: this.cameras.map((c: CameraInfo): CameraInfoItem => ({ id: c.id, name: c.name }))
+      };
+      console.info('[TaskExecuteView] ✅ 摄像头列表刷新成功:', JSON.stringify(logInfo));
+      
+      // 如果当前选择的摄像头索引超出范围，重置为第一个
+      if (this.currentCameraIndex >= this.cameras.length) {
+        this.currentCameraIndex = 0;
+      }
+      
+      // 如果有摄像头且当前没有选择，选择第一个
+      if (this.cameras.length > 0 && this.currentCameraIndex >= 0) {
+        this.switchCamera(this.currentCameraIndex);
+      }
+      
+      // 显示刷新结果
+      setTimeout(() => {
+        try {
+          const changeText = this.cameras.length !== oldCameraCount ? 
+            `摄像头数量从${oldCameraCount}个变为${this.cameras.length}个` : 
+            `摄像头列表已更新(${this.cameras.length}个)`;
+          promptAction.showToast({
+            message: changeText,
+            duration: 2500
+          });
+        } catch (toastError) {
+          console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+        }
+      }, 0);
+      
+    } catch (error) {
+      console.error('[TaskExecuteView] ❌ 刷新摄像头列表失败:', error);
+      
+      // 显示错误提示
+      setTimeout(() => {
+        try {
+          promptAction.showToast({
+            message: '刷新摄像头列表失败，请检查网络连接',
+            duration: 3000
+          });
+        } catch (toastError) {
+          console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+        }
+      }, 0);
+    }
+  }
+
   openFlawDetail(flaw: LiveFlaw) {
     this.selectedFlaw = flaw;
     this.showFlawDetail = true;
@@ -548,31 +626,49 @@ struct TaskExecuteView {
           Column() {
             // 摄像头连接状态信息
             Row() {
-              Text('摄像头服务:')
-                .fontSize(12)
-                .fontColor(AppConstants.COLORS.TEXT_REGULAR)
-              
-              Text(this.cameraConnectionStatus)
-                .fontSize(12)
-                .fontColor(this.cameraConnectionStatus === '连接正常' ? AppConstants.COLORS.SUCCESS : AppConstants.COLORS.DANGER)
-                .margin({ left: 8 })
-              
-              if (this.lastCameraCheck) {
-                Text(`(${this.lastCameraCheck})`)
-                  .fontSize(10)
-                  .fontColor(AppConstants.COLORS.TEXT_SECONDARY)
-                  .margin({ left: 5 })
+              Column() {
+                Row() {
+                  Text('摄像头服务:')
+                    .fontSize(12)
+                    .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                  
+                  Text(this.cameraConnectionStatus)
+                    .fontSize(12)
+                    .fontColor(this.cameraConnectionStatus === '连接正常' ? AppConstants.COLORS.SUCCESS : AppConstants.COLORS.DANGER)
+                    .margin({ left: 8 })
+                  
+                  if (this.lastCameraCheck) {
+                    Text(`(${this.lastCameraCheck})`)
+                      .fontSize(10)
+                      .fontColor(AppConstants.COLORS.TEXT_SECONDARY)
+                      .margin({ left: 5 })
+                  }
+                  
+                  Text(`视频源: ${this.cameras.length}个`)
+                    .fontSize(12)
+                    .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                    .margin({ left: 15 })
+                }
+                .alignItems(VerticalAlign.Center)
               }
+              .layoutWeight(1)
               
-              Text(`视频源: ${this.cameras.length}个`)
-                .fontSize(12)
-                .fontColor(AppConstants.COLORS.TEXT_REGULAR)
-                .margin({ left: 15 })
+              // 手动刷新摄像头列表按钮
+              Button('🔄 刷新摄像头列表')
+                .fontSize(11)
+                .fontColor(AppConstants.COLORS.PRIMARY)
+                .backgroundColor('transparent')
+                .border({ width: 1, color: AppConstants.COLORS.PRIMARY })
+                .borderRadius(4)
+                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .onClick(() => this.refreshCameraList())
             }
             .width('100%')
             .padding({ left: 10, right: 10, top: 8, bottom: 8 })
             .backgroundColor('#f8f9fa')
             .border({ width: { bottom: 1 }, color: '#eeeeee' })
+            .justifyContent(FlexAlign.SpaceBetween)
+            .alignItems(VerticalAlign.Center)
             // 视频播放器
             Stack() {
               if (this.videoUrl && this.cameras.length > 0) {
