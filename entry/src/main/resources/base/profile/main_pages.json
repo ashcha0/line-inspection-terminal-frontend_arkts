@@ -5,6 +5,7 @@
     "pages/TaskDetailView",
     "pages/TaskExecuteView",
     "pages/SettingsView",
-    "pages/Index"
+    "pages/Index",
+    "pages/TaskReviewView"
   ]
 }
