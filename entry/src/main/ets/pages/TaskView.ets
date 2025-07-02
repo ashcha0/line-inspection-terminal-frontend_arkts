@@ -51,17 +51,22 @@ struct TaskView {
         taskStatus: this.searchParams.taskStatus
       };
       
+      console.info('[TaskView] 🔍 开始加载任务列表，参数:', JSON.stringify(params));
       const response = await TaskService.listTask(params);
+      console.info('[TaskView] 📋 任务列表响应:', JSON.stringify(response));
       
-      interface ResponseWithCode {
-        code: number;
-      }
-      const responseWithCode = response as ResponseWithCode;
-      if (responseWithCode.code === 200) {
+      if (response.code === 200) {
         this.tasks = response.rows || [];
+        console.info('[TaskView] ✅ 任务列表加载成功，数量:', this.tasks.length);
+      } else {
+        console.error('[TaskView] ❌ 任务列表加载失败，错误码:', response.code, '错误信息:', response.msg);
+        promptAction.showToast({
+          message: response.msg || '加载任务列表失败',
+          duration: 2000
+        });
       }
     } catch (error) {
-      console.error('加载任务列表失败:', error);
+      console.error('[TaskView] ❌ 加载任务列表异常:', error);
       promptAction.showToast({
         message: '加载任务列表失败',
         duration: 2000

@@ -69,18 +69,34 @@ export class TaskService {
       if (params.taskStatus) queryString += `&taskStatus=${params.taskStatus}`;
       
       const response = await HttpUtil.get(`/agv/task/list?${queryString}`);
+      console.info('[TaskService] 📋 原始响应数据:', JSON.stringify(response));
       
+      // 根据日志，API直接返回包含total和rows的对象，而不是嵌套在data中
       interface ResponseData {
         total?: number;
         rows?: AgvTask[];
+        code?: number;
+        msg?: string;
       }
-      const responseData = response.data as ResponseData;
+      
+      let responseData: ResponseData;
+      // 检查数据是否在response.data中还是直接在response中
+      if (response.data && typeof response.data === 'object' && (response.data as ResponseData).total !== undefined) {
+        responseData = response.data as ResponseData;
+      } else if ((response as ResponseData).total !== undefined) {
+        responseData = response as ResponseData;
+      } else {
+        responseData = response.data as ResponseData;
+      }
+      
       console.info('[TaskService] ✅ 任务列表获取成功，数量:', responseData?.total || 0);
+      console.info('[TaskService] 📋 解析后的任务数据:', responseData?.rows?.length || 0, '条');
+      
       return {
         total: responseData?.total || 0,
         rows: responseData?.rows || [],
-        code: response.code,
-        msg: response.msg
+        code: responseData?.code || response.code || 200,
+        msg: responseData?.msg || response.msg || '查询成功'
       } as TableDataInfo<AgvTask>;
     } catch (error) {
       console.error('[TaskService] ❌ 获取任务列表失败:', error);
