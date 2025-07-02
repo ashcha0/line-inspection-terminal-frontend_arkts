@@ -704,7 +704,7 @@ struct TaskExecuteView {
                 .fontWeight(FontWeight.Bold)
                 .margin({ bottom: 15 })
 
-              Stack() {
+              Stack({ alignContent: Alignment.Start }) {
                 // 进度条背景
                 Row()
                   .width('100%')
@@ -718,6 +718,7 @@ struct TaskExecuteView {
                   .height(8)
                   .backgroundColor(AppConstants.COLORS.PRIMARY)
                   .borderRadius(4)
+                  .alignSelf(ItemAlign.Start)
 
                 // 车辆位置标记
                 Text('🚛')
