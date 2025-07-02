@@ -6,6 +6,7 @@ import { AppConstants } from '../constants/AppConstants';
 import { AgvMovementService } from '../services/AgvMovementService';
 import { AgvTask } from '../services/TaskService';
 import { CameraService, CameraInfo } from '../services/CameraService';
+import { FlawService, AgvFlaw } from '../services/FlawService';
 
 // 摄像头接口（使用CameraService中的CameraInfo）
 type Camera = CameraInfo;
@@ -32,15 +33,13 @@ interface VehicleStatus {
   isRunning: boolean;
 }
 
-// 故障接口
-interface LiveFlaw {
-  id: number;
-  taskId: number;
-  flawName: string;
-  flawType: string;
-  position: number;
-  status: string;
-  createTime: string;
+// 故障接口 - 使用FlawService中的AgvFlaw接口
+type LiveFlaw = AgvFlaw;
+
+// 新故障弹窗状态接口
+interface NewFlawAlert {
+  show: boolean;
+  flaw: LiveFlaw | null;
 }
 
 // 使用AgvTask接口替代本地Task接口
@@ -61,6 +60,8 @@ struct TaskExecuteView {
   @State isTaskRunning: boolean = false;
   @State cameraConnectionStatus: string = '检测中...';
   @State lastCameraCheck: string = '';
+  @State newFlawAlert: NewFlawAlert = { show: false, flaw: null };
+  @State lastFlawCount: number = 0;
   
   private taskId: number = 0;
   private statusTimer: number = -1;
@@ -269,26 +270,42 @@ struct TaskExecuteView {
 
   async updateLiveFlaws() {
     try {
-      const response = await HttpUtil.get(`/agv/flaw/live/${this.taskId}`);
-      if (response.code === 200) {
-        interface FlawData {
-          flaws?: LiveFlaw[];
-        }
-        const flawData = response.data as FlawData;
-        const newFlaws = flawData?.flaws || [];
+      console.info('[TaskExecuteView] 🔄 更新实时故障数据');
+      
+      // 使用FlawService获取实时故障信息
+      const newFlaws = await FlawService.liveInfo(this.taskId);
+      
+      // 检查是否有新故障
+      if (newFlaws.length > this.lastFlawCount) {
+        const newFlawsAdded = newFlaws.slice(this.lastFlawCount);
         
-        // 检查是否有新故障
-        if (newFlaws.length > this.liveFlaws.length) {
-          promptAction.showToast({
-            message: '发现新故障，请及时处理',
-            duration: 3000
-          });
+        // 显示新故障提示
+        setTimeout(() => {
+          try {
+            promptAction.showToast({
+              message: `发现${newFlawsAdded.length}个新故障，请及时处理`,
+              duration: 3000
+            });
+          } catch (toastError) {
+            console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+          }
+        }, 0);
+        
+        // 如果有新故障，显示弹窗提醒第一个新故障
+        if (newFlawsAdded.length > 0) {
+          this.showNewFlawAlert(newFlawsAdded[0]);
         }
         
-        this.liveFlaws = newFlaws;
+        console.info(`[TaskExecuteView] 🚨 发现${newFlawsAdded.length}个新故障:`, 
+          newFlawsAdded.map(f => f.flawName).join(', '));
       }
+      
+      this.liveFlaws = newFlaws;
+      this.lastFlawCount = newFlaws.length;
+      
+      console.info(`[TaskExecuteView] ✅ 实时故障数据更新成功，当前故障数: ${newFlaws.length}`);
     } catch (error) {
-      console.error('更新实时故障失败:', error);
+      console.error('[TaskExecuteView] ❌ 更新实时故障失败:', error);
     }
   }
 
@@ -550,11 +567,36 @@ struct TaskExecuteView {
     this.selectedFlaw = null;
   }
 
+  // 显示新故障弹窗提醒
+  showNewFlawAlert(flaw: LiveFlaw) {
+    this.newFlawAlert = {
+      show: true,
+      flaw: flaw
+    };
+    console.info('[TaskExecuteView] 🔔 显示新故障弹窗:', flaw.flawName);
+  }
+
+  // 关闭新故障弹窗
+  closeNewFlawAlert() {
+    this.newFlawAlert = {
+      show: false,
+      flaw: null
+    };
+  }
+
+  // 从新故障弹窗查看详情
+  viewFlawFromAlert() {
+    if (this.newFlawAlert.flaw) {
+      this.openFlawDetail(this.newFlawAlert.flaw);
+      this.closeNewFlawAlert();
+    }
+  }
+
   getFlawStatusColor(status: string): string {
     switch (status) {
       case 'confirmed':
         return '#f56c6c';
-      case 'suspected':
+      case 'pending':
         return '#e6a23c';
       default:
         return '#909399';
@@ -787,7 +829,7 @@ struct TaskExecuteView {
                   .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
                   .margin({ bottom: 10 })
                 
-                Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+                Flex({ wrap: FlexWrap.Wrap }) {
                   ForEach(this.cameras, (camera: Camera, index: number) => {
                     Button() {
                       Column() {
@@ -1032,13 +1074,13 @@ struct TaskExecuteView {
                   .position({ x: `${Math.min(Math.max(Math.round(this.vehicleStatus.position / 10), 0), 100)}%`, y: -6 })
 
                 // 故障标记
-                ForEach(this.liveFlaws, (flaw: LiveFlaw) => {
+                ForEach(this.liveFlaws, (flaw: LiveFlaw, index: number) => {
                   Button()
                     .width(12)
                     .height(12)
                     .borderRadius(6)
-                    .backgroundColor(this.getFlawStatusColor(flaw.status))
-                    .position({ x: `${flaw.position}%`, y: -2 })
+                    .backgroundColor(this.getFlawStatusColor(flaw.confirmed ? 'confirmed' : 'pending'))
+                    .position({ x: `${(index + 1) * 20}%`, y: -2 })
                     .onClick(() => this.openFlawDetail(flaw))
                 }, (flaw: LiveFlaw) => flaw.id.toString())
               }
@@ -1088,7 +1130,7 @@ struct TaskExecuteView {
 
                       Text('📍')
                         .fontSize(16)
-                        .fontColor(this.getFlawStatusColor(flaw.status))
+                        .fontColor(this.getFlawStatusColor(flaw.confirmed ? 'confirmed' : 'pending'))
                     }
                     .width('100%')
                     .padding(12)
@@ -1175,6 +1217,112 @@ struct TaskExecuteView {
       .height('100%')
       .backgroundColor('rgba(0,0,0,0.5)')
       .onClick(() => this.closeFlawDetail())
+    }
+
+    // 新故障提醒弹窗
+    if (this.newFlawAlert.show && this.newFlawAlert.flaw) {
+      Stack() {
+        Column() {
+          // 弹窗标题
+          Row() {
+            Text('⚠️')
+              .fontSize(24)
+              .fontColor('#FF6B35')
+            
+            Text('发现新故障')
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#FF6B35')
+              .margin({ left: 8 })
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Start)
+          .margin({ bottom: 16 })
+
+          // 故障信息
+          Column() {
+            Row() {
+              Text('故障名称：')
+                .fontSize(14)
+                .fontColor('#666666')
+                .width(80)
+              Text(this.newFlawAlert.flaw.flawName || '未知故障')
+                .fontSize(14)
+                .fontColor('#333333')
+                .fontWeight(FontWeight.Medium)
+                .layoutWeight(1)
+            }
+            .width('100%')
+            .margin({ bottom: 8 })
+
+            Row() {
+              Text('故障类型：')
+                .fontSize(14)
+                .fontColor('#666666')
+                .width(80)
+              Text(this.newFlawAlert.flaw.flawType || '未知类型')
+                .fontSize(14)
+                .fontColor('#333333')
+                .layoutWeight(1)
+            }
+            .width('100%')
+            .margin({ bottom: 8 })
+
+            Row() {
+              Text('发现时间：')
+                .fontSize(14)
+                .fontColor('#666666')
+                .width(80)
+              Text(this.newFlawAlert.flaw.createTime ? new Date(this.newFlawAlert.flaw.createTime).toLocaleString() : '')
+                .fontSize(14)
+                .fontColor('#333333')
+                .layoutWeight(1)
+            }
+            .width('100%')
+          }
+          .alignItems(HorizontalAlign.Start)
+          .margin({ bottom: 20 })
+
+          // 操作按钮
+          Row() {
+            Button('稍后处理')
+              .fontSize(14)
+              .fontColor('#666666')
+              .backgroundColor('#F5F5F5')
+              .borderRadius(6)
+              .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+              .onClick(() => {
+                this.closeNewFlawAlert();
+              })
+
+            Button('查看详情')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#007AFF')
+              .borderRadius(6)
+              .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+              .margin({ left: 12 })
+              .onClick(() => {
+                this.viewFlawFromAlert();
+              })
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.End)
+        }
+        .width(320)
+        .padding(20)
+        .backgroundColor('#FFFFFF')
+        .borderRadius(12)
+        .shadow({
+          radius: 20,
+          color: '#1A000000',
+          offsetX: 0,
+          offsetY: 4
+        })
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor('rgba(0, 0, 0, 0.5)')
     }
   }
   .width('100%')

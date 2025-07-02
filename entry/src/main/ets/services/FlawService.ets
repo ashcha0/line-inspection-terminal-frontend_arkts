@@ -42,6 +42,13 @@ export interface TableDataInfo<T> {
   msg: string;
 }
 
+// 通用响应接口
+export interface ApiResponse<T = object> {
+  code: number;
+  msg: string;
+  data?: T;
+}
+
 /**
  * 故障管理服务类
  * 提供故障的增删改查、确认等功能
@@ -57,26 +64,26 @@ export class FlawService {
     try {
       console.info('[FlawService] 🔍 获取故障列表，参数:', JSON.stringify(params));
       
-      const queryParams = new URLSearchParams();
-      queryParams.append('pageNum', params.pageNum.toString());
-      queryParams.append('pageSize', params.pageSize.toString());
+      let queryString = `pageNum=${params.pageNum}&pageSize=${params.pageSize}`;
       
-      if (params.taskId) queryParams.append('taskId', params.taskId.toString());
-      if (params.flawType) queryParams.append('flawType', params.flawType);
-      if (params.confirmed !== undefined) queryParams.append('confirmed', params.confirmed.toString());
+      if (params.taskId) queryString += `&taskId=${params.taskId}`;
+      if (params.flawType) queryString += `&flawType=${encodeURIComponent(params.flawType)}`;
+      if (params.confirmed !== undefined) queryString += `&confirmed=${params.confirmed}`;
       
-      const response = await HttpUtil.get(`/agv/flaw/list?${queryParams.toString()}`);
-      console.info('[FlawService] ✅ 故障列表获取成功，数量:', response.data?.total || 0);
+      const response = await HttpUtil.get(`/agv/flaw/list?${queryString}`);
+      const responseData = response.data as TableDataInfo<AgvFlaw>;
+      console.info('[FlawService] ✅ 故障列表获取成功，数量:', responseData?.total || 0);
       
-      return {
-        total: response.data?.total || 0,
-        rows: response.data?.rows || [],
+      const result: TableDataInfo<AgvFlaw> = {
+        total: responseData?.total || 0,
+        rows: responseData?.rows || [],
         code: response.code,
         msg: response.msg
       };
+      return result;
     } catch (error) {
       console.error('[FlawService] ❌ 获取故障列表失败:', error);
-      throw error;
+      throw new Error('获取故障列表失败');
     }
   }
   
@@ -89,11 +96,12 @@ export class FlawService {
     try {
       console.info(`[FlawService] 🔍 获取故障详情，ID: ${id}`);
       const response = await HttpUtil.get(`/agv/flaw/${id}`);
-      console.info('[FlawService] ✅ 故障详情获取成功:', response.data?.flawName || '未知故障');
+      const flawData = response.data as AgvFlaw;
+      console.info('[FlawService] ✅ 故障详情获取成功:', flawData?.flawName || '未知故障');
       return response.data as AgvFlaw;
     } catch (error) {
       console.error(`[FlawService] ❌ 获取故障详情失败，ID: ${id}`, error);
-      throw error;
+      throw new Error(`获取故障详情失败，ID: ${id}`);
     }
   }
   
@@ -102,15 +110,21 @@ export class FlawService {
    * @param flaw 故障数据
    * @returns 创建结果
    */
-  static async addFlaw(flaw: Partial<AgvFlaw>): Promise<any> {
+  static async addFlaw(flaw: Partial<AgvFlaw>): Promise<ApiResponse<AgvFlaw>> {
     try {
       console.info('[FlawService] 📝 创建新故障:', flaw.flawName);
       const response = await HttpUtil.post('/agv/flaw', flaw);
-      console.info('[FlawService] ✅ 故障创建成功，ID:', response.data?.id);
-      return response;
+      const createdFlaw = response.data as AgvFlaw;
+      console.info('[FlawService] ✅ 故障创建成功，ID:', createdFlaw?.id);
+      const result: ApiResponse<AgvFlaw> = {
+        code: response.code,
+        msg: response.msg,
+        data: createdFlaw
+      };
+      return result;
     } catch (error) {
       console.error('[FlawService] ❌ 创建故障失败:', error);
-      throw error;
+      throw new Error('创建故障失败');
     }
   }
   
@@ -119,15 +133,20 @@ export class FlawService {
    * @param flaw 故障数据
    * @returns 更新结果
    */
-  static async updateFlaw(flaw: Partial<AgvFlaw>): Promise<any> {
+  static async updateFlaw(flaw: Partial<AgvFlaw>): Promise<ApiResponse<object>> {
     try {
       console.info(`[FlawService] 📝 更新故障，ID: ${flaw.id}`);
       const response = await HttpUtil.put('/agv/flaw', flaw);
       console.info('[FlawService] ✅ 故障更新成功');
-      return response;
+      const result: ApiResponse<object> = {
+        code: response.code,
+        msg: response.msg,
+        data: response.data
+      };
+      return result;
     } catch (error) {
       console.error(`[FlawService] ❌ 更新故障失败，ID: ${flaw.id}`, error);
-      throw error;
+      throw new Error(`更新故障失败，ID: ${flaw.id}`);
     }
   }
   
@@ -136,15 +155,20 @@ export class FlawService {
    * @param id 故障ID
    * @returns 删除结果
    */
-  static async delFlaw(id: number): Promise<any> {
+  static async delFlaw(id: number): Promise<ApiResponse<object>> {
     try {
       console.info(`[FlawService] 🗑️ 删除故障，ID: ${id}`);
       const response = await HttpUtil.delete(`/agv/flaw/${id}`);
       console.info('[FlawService] ✅ 故障删除成功');
-      return response;
+      const result: ApiResponse<object> = {
+        code: response.code,
+        msg: response.msg,
+        data: response.data
+      };
+      return result;
     } catch (error) {
       console.error(`[FlawService] ❌ 删除故障失败，ID: ${id}`, error);
-      throw error;
+      throw new Error(`删除故障失败，ID: ${id}`);
     }
   }
   
@@ -157,11 +181,12 @@ export class FlawService {
     try {
       console.info(`[FlawService] 🔄 轮询获取实时故障信息，任务ID: ${taskId}`);
       const response = await HttpUtil.get(`/agv/flaw/live/${taskId}`);
-      console.info('[FlawService] ✅ 实时故障信息获取成功，数量:', response.data?.length || 0);
-      return response.data || [];
+      const responseData = response.data as AgvFlaw[];
+      console.info('[FlawService] ✅ 实时故障信息获取成功，数量:', responseData?.length || 0);
+      return responseData || [];
     } catch (error) {
       console.error(`[FlawService] ❌ 获取实时故障信息失败，任务ID: ${taskId}`, error);
-      throw error;
+      throw new Error(`获取实时故障信息失败，任务ID: ${taskId}`);
     }
   }
   
@@ -178,7 +203,7 @@ export class FlawService {
       return response.data === true;
     } catch (error) {
       console.error(`[FlawService] ❌ 检查任务缺陷确认状态失败，任务ID: ${taskId}`, error);
-      throw error;
+      throw new Error(`检查任务缺陷确认状态失败，任务ID: ${taskId}`);
     }
   }
   
@@ -189,20 +214,25 @@ export class FlawService {
    * @param remark 备注信息
    * @returns 确认结果
    */
-  static async confirmFlaw(id: number, confirmed: boolean, remark?: string): Promise<any> {
+  static async confirmFlaw(id: number, confirmed: boolean, remark?: string): Promise<ApiResponse<object>> {
     try {
       console.info(`[FlawService] ✅ 确认故障，ID: ${id}, 确认: ${confirmed}`);
-      const data = {
+      const data: Partial<AgvFlaw> = {
         id: id,
         confirmed: confirmed,
         remark: remark
       };
       const response = await HttpUtil.put('/agv/flaw', data);
       console.info('[FlawService] ✅ 故障确认状态更新成功');
-      return response;
+      const result: ApiResponse<object> = {
+        code: response.code,
+        msg: response.msg,
+        data: response.data
+      };
+      return result;
     } catch (error) {
       console.error(`[FlawService] ❌ 更新故障确认状态失败，ID: ${id}`, error);
-      throw error;
+      throw new Error(`更新故障确认状态失败，ID: ${id}`);
     }
   }
 }
