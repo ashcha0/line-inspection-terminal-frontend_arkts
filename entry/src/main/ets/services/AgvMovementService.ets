@@ -30,11 +30,15 @@ export class AgvMovementService {
     try {
       console.info('[AgvMovementService] 💓 查询AGV心跳状态');
       const response = await HttpUtil.get('/agv/movement/heartbeat');
-      console.info('[AgvMovementService] ✅ AGV心跳状态获取成功:', response.data?.status || '未知');
+      interface HeartbeatData {
+        status?: string;
+      }
+      const heartbeatData = response.data as HeartbeatData;
+      console.info('[AgvMovementService] ✅ AGV心跳状态获取成功:', heartbeatData?.status || '未知');
       
       return {
         success: response.code === 200,
-        status: response.data?.status || 'unknown',
+        status: heartbeatData?.status || 'unknown',
         timestamp: new Date().toISOString(),
         message: response.msg
       };
@@ -53,15 +57,15 @@ export class AgvMovementService {
    * 控制AGV向前移动
    * @returns 控制结果
    */
-  static async agvForward(): Promise<any> {
+  static async agvForward(): Promise<Object> {
     try {
       console.info('[AgvMovementService] ⬆️ 控制AGV向前移动');
       const response = await HttpUtil.post('/agv/movement/forward');
       console.info('[AgvMovementService] ✅ AGV向前移动指令发送成功');
       return response;
     } catch (error) {
-      console.error('[AgvMovementService] ❌ 控制AGV向前移动失败:', error);
-      throw error;
+      console.error('[AgvMovementService] ❌ AGV向前移动失败:', error);
+      throw new Error('AGV向前移动失败');
     }
   }
   
@@ -69,7 +73,7 @@ export class AgvMovementService {
    * 停止AGV
    * @returns 控制结果
    */
-  static async agvStop(): Promise<any> {
+  static async agvStop(): Promise<Object> {
     try {
       console.info('[AgvMovementService] ⏹️ 停止AGV');
       const response = await HttpUtil.post('/agv/movement/stop');
@@ -77,7 +81,7 @@ export class AgvMovementService {
       return response;
     } catch (error) {
       console.error('[AgvMovementService] ❌ 停止AGV失败:', error);
-      throw error;
+      throw new Error('停止AGV失败');
     }
   }
   
@@ -85,15 +89,15 @@ export class AgvMovementService {
    * 控制AGV向后移动
    * @returns 控制结果
    */
-  static async agvBackward(): Promise<any> {
+  static async agvBackward(): Promise<Object> {
     try {
       console.info('[AgvMovementService] ⬇️ 控制AGV向后移动');
       const response = await HttpUtil.post('/agv/movement/backward');
       console.info('[AgvMovementService] ✅ AGV向后移动指令发送成功');
       return response;
     } catch (error) {
-      console.error('[AgvMovementService] ❌ 控制AGV向后移动失败:', error);
-      throw error;
+      console.error('[AgvMovementService] ❌ AGV向后移动失败:', error);
+      throw new Error('AGV向后移动失败');
     }
   }
   
@@ -107,7 +111,7 @@ export class AgvMovementService {
       console.info('[AgvMovementService] 📊 获取AGV当前状态');
       
       // 先检查心跳状态
-      const heartbeatResult = await this.heartbeat();
+      const heartbeatResult = await AgvMovementService.heartbeat();
       
       // 模拟AGV状态数据
       const mockStatus: AgvStatusVO = {
@@ -133,15 +137,15 @@ export class AgvMovementService {
    * 紧急停止AGV
    * @returns 控制结果
    */
-  static async emergencyStop(): Promise<any> {
+  static async emergencyStop(): Promise<Object> {
     try {
       console.warn('[AgvMovementService] 🚨 紧急停止AGV');
-      const response = await this.agvStop();
+      const response = await AgvMovementService.agvStop();
       console.info('[AgvMovementService] ✅ 紧急停止指令发送成功');
       return response;
     } catch (error) {
       console.error('[AgvMovementService] ❌ 紧急停止AGV失败:', error);
-      throw error;
+      throw new Error('紧急停止AGV失败');
     }
   }
   
@@ -151,7 +155,7 @@ export class AgvMovementService {
    */
   static async isOnline(): Promise<boolean> {
     try {
-      const heartbeatResult = await this.heartbeat();
+      const heartbeatResult = await AgvMovementService.heartbeat();
       return heartbeatResult.success;
     } catch (error) {
       console.error('[AgvMovementService] ❌ 检查AGV在线状态失败:', error);

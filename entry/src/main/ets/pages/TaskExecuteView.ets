@@ -1,7 +1,10 @@
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
+import http from '@ohos.net.http';
 import { HttpUtil } from '../utils/HttpUtil';
 import { AppConstants } from '../constants/AppConstants';
+import { AgvMovementService } from '../services/AgvMovementService';
+import { AgvTask } from '../services/TaskService';
 
 // 摄像头接口
 interface Camera {
@@ -31,21 +34,12 @@ interface LiveFlaw {
   createTime: string;
 }
 
-// 任务接口
-interface Task {
-  id: number;
-  taskNo: string;
-  taskName: string;
-  startLocation: string;
-  endLocation: string;
-  distance: number;
-  status: string;
-}
+// 使用AgvTask接口替代本地Task接口
 
 @Entry
 @Component
 struct TaskExecuteView {
-  @State task: Task | null = null;
+  @State task: AgvTask | null = null;
   @State vehicleStatus: VehicleStatus | null = null;
   @State liveFlaws: LiveFlaw[] = [];
   @State cameras: Camera[] = [];
@@ -80,8 +74,14 @@ struct TaskExecuteView {
     try {
       const response = await HttpUtil.get(`/agv/task/${this.taskId}`);
       if (response.code === 200) {
-        this.task = response.data as Task;
-        this.isTaskRunning = this.task.status === AppConstants.TASK_STATUS.RUNNING;
+        this.task = response.data as AgvTask;
+        this.isTaskRunning = this.task.taskStatus === AppConstants.TASK_STATUS.RUNNING;
+        console.info('[TaskExecuteView] 📋 任务详情加载成功:', JSON.stringify({
+          taskId: this.taskId,
+          taskStatus: this.task.taskStatus,
+          isTaskRunning: this.isTaskRunning,
+          expectedRunningStatus: AppConstants.TASK_STATUS.RUNNING
+        }));
       }
     } catch (error) {
       console.error('加载任务详情失败:', error);
@@ -90,10 +90,17 @@ struct TaskExecuteView {
 
   async loadCameras() {
     try {
-      const response = await HttpUtil.get('/easy-api/devices?page=1&size=999', {
+      // 使用完整的摄像头服务URL
+      const cameraUrl = `${AppConstants.CAMERA_BASE_URL}/devices?page=1&size=999`;
+      console.info('[TaskExecuteView] 📹 请求摄像头设备列表:', cameraUrl);
+      
+      const response = await HttpUtil.request(cameraUrl, {
+        method: http.RequestMethod.GET,
         headers: {
-          'Authorization': 'Basic YWRtaW4xMjM6QWRtaW5AMTIz'
-        }
+          'Authorization': 'Basic YWRtaW4xMjM6QWRtaW5AMTIz',
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
       });
       
       if (response.code === 200) {
@@ -162,18 +169,52 @@ struct TaskExecuteView {
 
   async updateVehicleStatus() {
     try {
-      // 模拟车辆状态数据（实际应该从API获取）
-      const mockStatus: VehicleStatus = {
+      console.info('[TaskExecuteView] 📊 更新车辆状态');
+      
+      // 获取AGV实时状态
+      const agvStatusResult = await AgvMovementService.getAgvStatus();
+      
+      // 定义AGV状态数据接口
+      interface AgvStatusData {
+        sysTime?: string;
+        currentPosition?: number;
+        isRunning?: boolean;
+      }
+      
+      const agvStatus = agvStatusResult as AgvStatusData;
+      
+      // 构建车辆状态数据
+      const vehicleStatus: VehicleStatus = {
+        taskId: this.taskId,
+        systemTime: agvStatus.sysTime || new Date().toLocaleTimeString(),
+        distance: agvStatus.currentPosition || 0,
+        flawCount: this.liveFlaws.length,
+        position: agvStatus.currentPosition || 0,
+        isRunning: agvStatus.isRunning || false
+      };
+      
+      this.vehicleStatus = vehicleStatus;
+      // 注意：不要在这里覆盖任务运行状态，任务状态应该基于任务本身而不是AGV状态
+      // this.isTaskRunning 应该只在 loadTaskDetail 中设置
+      
+      console.info('[TaskExecuteView] ✅ 车辆状态更新成功:', JSON.stringify({
+        vehicleStatus: vehicleStatus,
+        taskRunning: this.isTaskRunning,
+        agvRunning: agvStatus.isRunning
+      }));
+    } catch (error) {
+      console.error('[TaskExecuteView] ❌ 更新车辆状态失败:', error);
+      
+      // 如果获取失败，使用默认状态
+      const fallbackStatus: VehicleStatus = {
         taskId: this.taskId,
         systemTime: new Date().toLocaleTimeString(),
-        distance: Math.floor(Math.random() * 1000) + 100,
+        distance: 0,
         flawCount: this.liveFlaws.length,
-        position: Math.floor(Math.random() * 100),
-        isRunning: this.isTaskRunning
+        position: 0,
+        isRunning: false
       };
-      this.vehicleStatus = mockStatus;
-    } catch (error) {
-      console.error('更新车辆状态失败:', error);
+      this.vehicleStatus = fallbackStatus;
     }
   }
 
@@ -204,30 +245,41 @@ struct TaskExecuteView {
 
   async controlVehicle(action: string) {
     try {
-      let endpoint = '';
+      console.info(`[TaskExecuteView] 🚗 控制车辆: ${action}`);
+      
+      interface ControlResponse {
+        code?: number;
+        msg?: string;
+      }
+      
+      let response: ControlResponse;
       switch (action) {
         case 'forward':
-          endpoint = '/agv/movement/forward';
+          response = await AgvMovementService.agvForward() as ControlResponse;
           break;
         case 'stop':
-          endpoint = '/agv/movement/stop';
+          response = await AgvMovementService.agvStop() as ControlResponse;
           break;
         case 'backward':
-          endpoint = '/agv/movement/backward';
+          response = await AgvMovementService.agvBackward() as ControlResponse;
           break;
         default:
+          console.warn(`[TaskExecuteView] ⚠️ 未知的控制指令: ${action}`);
           return;
       }
       
-      const response = await HttpUtil.post(endpoint);
       if (response.code === 200) {
+        const actionText = action === 'forward' ? '前进' : action === 'stop' ? '停止' : '后退';
         promptAction.showToast({
-          message: `车辆${action === 'forward' ? '前进' : action === 'stop' ? '停止' : '后退'}指令已发送`,
+          message: `车辆${actionText}指令已发送`,
           duration: 2000
         });
+        console.info(`[TaskExecuteView] ✅ 车辆${actionText}指令发送成功`);
+      } else {
+        throw new Error(`控制指令返回错误: ${response.msg || '未知错误'}`);
       }
     } catch (error) {
-      console.error('控制车辆失败:', error);
+      console.error('[TaskExecuteView] ❌ 控制车辆失败:', error);
       promptAction.showToast({
         message: '控制指令发送失败',
         duration: 2000
@@ -237,6 +289,12 @@ struct TaskExecuteView {
 
   async finishTask() {
     try {
+      console.info('[TaskExecuteView] 🏁 完成任务');
+      
+      // 先停止AGV确保安全
+      await AgvMovementService.agvStop();
+      console.info('[TaskExecuteView] ✅ AGV已停止');
+      
       const response = await HttpUtil.post(`/agv/task/end/${this.taskId}?isAbort=false`);
       if (response.code === 200) {
         promptAction.showToast({
@@ -247,6 +305,8 @@ struct TaskExecuteView {
         this.stopPolling();
         this.isTaskRunning = false;
         
+        console.info('[TaskExecuteView] ✅ 任务完成成功');
+        
         // 跳转到任务详情页面
         router.replaceUrl({
           url: 'pages/TaskDetailView',
@@ -256,7 +316,7 @@ struct TaskExecuteView {
         });
       }
     } catch (error) {
-      console.error('完成任务失败:', error);
+      console.error('[TaskExecuteView] ❌ 完成任务失败:', error);
       promptAction.showToast({
         message: '完成任务失败，请重试',
         duration: 2000
@@ -266,6 +326,12 @@ struct TaskExecuteView {
 
   async abortTask() {
     try {
+      console.info('[TaskExecuteView] 🛑 终止任务');
+      
+      // 紧急停止AGV
+      await AgvMovementService.emergencyStop();
+      console.info('[TaskExecuteView] ✅ AGV紧急停止成功');
+      
       const response = await HttpUtil.post(`/agv/task/end/${this.taskId}?isAbort=true`);
       if (response.code === 200) {
         promptAction.showToast({
@@ -276,10 +342,12 @@ struct TaskExecuteView {
         this.stopPolling();
         this.isTaskRunning = false;
         
+        console.info('[TaskExecuteView] ✅ 任务终止成功');
+        
         router.back();
       }
     } catch (error) {
-      console.error('终止任务失败:', error);
+      console.error('[TaskExecuteView] ❌ 终止任务失败:', error);
       promptAction.showToast({
         message: '终止任务失败，请重试',
         duration: 2000
@@ -507,7 +575,7 @@ struct TaskExecuteView {
                     .fontSize(14)
                     .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                     .width(80)
-                  Text(this.task.taskNo)
+                  Text(this.task.taskCode)
                     .fontSize(14)
                     .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
                 }

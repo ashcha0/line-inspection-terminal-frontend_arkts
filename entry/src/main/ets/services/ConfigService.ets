@@ -1,5 +1,6 @@
 import { HttpUtil } from '../utils/HttpUtil';
 import { AppConstants } from '../constants/AppConstants';
+import { AgvMovementService } from './AgvMovementService';
 
 // AGV配置接口定义
 export interface AgvConfig {
@@ -150,13 +151,13 @@ export class ConfigService {
     try {
       console.info(`[ConfigService] 🔗 测试AGV连接: ${host}:${port}`);
       
-      // 这里可以调用心跳接口来测试连接
-      const response = await HttpUtil.get('/agv/movement/heartbeat', {
-        timeout: 5000 // 5秒超时
-      });
+      // 使用AgvMovementService的心跳检测来测试连接
+      const heartbeatResult = await AgvMovementService.heartbeat();
       
-      const isConnected = response.code === 200;
+      const isConnected = heartbeatResult.success;
       console.info(`[ConfigService] ${isConnected ? '✅' : '❌'} AGV连接测试${isConnected ? '成功' : '失败'}`);
+      console.info(`[ConfigService] 📊 AGV状态: ${heartbeatResult.status}, 消息: ${heartbeatResult.message || '无'}`);
+      
       return isConnected;
     } catch (error) {
       console.error('[ConfigService] ❌ AGV连接测试失败:', error);
