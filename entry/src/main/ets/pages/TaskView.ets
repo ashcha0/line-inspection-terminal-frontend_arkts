@@ -129,32 +129,83 @@ struct TaskView {
     }
 
     try {
+      // 自动生成任务编号：TASK-年月日时分秒
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hour = String(now.getHours()).padStart(2, '0');
+      const minute = String(now.getMinutes()).padStart(2, '0');
+      const second = String(now.getSeconds()).padStart(2, '0');
+      const autoTaskCode = `TASK-${year}${month}${day}${hour}${minute}${second}`;
+      
       const taskData: Partial<AgvTask> = {
         taskName: this.taskName,
-        taskCode: this.taskCode || undefined,
+        taskCode: this.taskCode || autoTaskCode,
         startPos: this.startPos,
         taskTrip: this.taskTrip,
         creator: this.creator,
         executor: this.executor,
         remark: this.remark || undefined
       };
-
-      interface ResponseWithCode {
-        code: number;
-      }
-      const response = await TaskService.addTask(taskData) as ResponseWithCode;
       
-      if (response.code === 200) {
+      console.info('[TaskView] 🔢 自动生成任务编号:', autoTaskCode);
+
+      console.info('[TaskView] 📝 开始创建任务:', JSON.stringify(taskData));
+      const response = await TaskService.addTask(taskData);
+      
+      console.info('[TaskView] 📋 任务创建响应:', JSON.stringify(response));
+      
+      // 检查响应状态
+       interface ResponseWithCode {
+         code: number;
+         msg?: string;
+         data?: Object;
+       }
+      
+      const responseData = response as ResponseWithCode;
+      
+      if (responseData.code === 200) {
+        console.info('[TaskView] ✅ 任务创建成功，准备更新UI');
+        
+        // 直接在当前上下文中执行UI操作
+        try {
+          console.info('[TaskView] 🔄 开始执行UI更新操作');
+          
+          // 先关闭模态框
+          this.closeAddTask();
+          console.info('[TaskView] 🔄 模态框已关闭');
+          
+          // 刷新任务列表
+          this.loadTasks();
+          console.info('[TaskView] 🔄 任务列表刷新完成');
+          
+          // 显示成功提示
+          promptAction.showToast({
+            message: '任务创建成功',
+            duration: 2000
+          });
+          
+          console.info('[TaskView] ✅ UI更新完成');
+        } catch (uiError) {
+          console.error('[TaskView] ❌ UI更新失败:', uiError);
+          // 如果UI更新失败，至少尝试关闭弹窗
+          try {
+            this.closeAddTask();
+          } catch (closeError) {
+            console.error('[TaskView] ❌ 关闭弹窗失败:', closeError);
+          }
+        }
+      } else {
+        console.error('[TaskView] ❌ 任务创建失败，错误码:', responseData.code, '错误信息:', responseData.msg);
         promptAction.showToast({
-          message: '任务创建成功',
+          message: responseData.msg || '创建任务失败',
           duration: 2000
         });
-        
-        this.closeAddTask();
-        this.loadTasks();
       }
+      
     } catch (error) {
-      console.error('创建任务失败:', error);
+      console.error('[TaskView] ❌ 创建任务异常:', error);
       promptAction.showToast({
         message: '创建任务失败，请重试',
         duration: 2000
@@ -456,14 +507,14 @@ struct TaskView {
                 .layoutWeight(1)
                 .textAlign(TextAlign.Center)
               
-              Text('起始位置')
+              Text('起始地点')
                 .fontSize(14)
                 .fontWeight(FontWeight.Bold)
                 .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
                 .width(100)
                 .textAlign(TextAlign.Center)
               
-              Text('任务行程')
+              Text('距离')
                 .fontSize(14)
                 .fontWeight(FontWeight.Bold)
                 .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
@@ -670,11 +721,11 @@ struct TaskView {
 
                 Row() {
                   Column() {
-                    Text('起始位置 *')
+                    Text('起始地点 *')
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入起始位置' })
+                    TextInput({ placeholder: '请输入起始地点' })
                       .fontSize(14)
                       .onChange((value: string) => {
                         this.startPos = value;
@@ -685,11 +736,11 @@ struct TaskView {
                   .margin({ right: 15 })
 
                   Column() {
-                    Text('任务行程 *')
+                    Text('距离 *')
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入任务行程' })
+                    TextInput({ placeholder: '请输入距离（公里）' })
                       .fontSize(14)
                       .onChange((value: string) => {
                         this.taskTrip = value;
