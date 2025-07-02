@@ -2,6 +2,9 @@
   "src": [
     "pages/InitView",
     "pages/TaskView",
+    "pages/TaskDetailView",
+    "pages/TaskExecuteView",
+    "pages/SettingsView",
     "pages/Index"
   ]
 }

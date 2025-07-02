@@ -97,12 +97,27 @@ struct TaskExecuteView {
       });
       
       if (response.code === 200) {
-        const devices = response.data?.rows || [];
-        this.cameras = devices.map((device: any, index: number) => ({
-          id: device.id,
-          name: `摄像头${index + 1}`,
-          url: `${AppConstants.WEBRTC_BASE_URL}/live/${device.id}_01.flv`
-        }));
+        interface DeviceItem {
+          id: string;
+        }
+        interface DeviceData {
+          rows?: DeviceItem[];
+        }
+        const deviceData = response.data as DeviceData;
+        const devices = deviceData?.rows || [];
+        interface CameraInfo {
+          id: string;
+          name: string;
+          url: string;
+        }
+        this.cameras = devices.map((device: DeviceItem, index: number) => {
+          const camera: CameraInfo = {
+            id: device.id,
+            name: `摄像头${index + 1}`,
+            url: `${AppConstants.WEBRTC_BASE_URL}/live/${device.id}_01.flv`
+          };
+          return camera;
+        });
         
         if (this.cameras.length > 0) {
           this.switchCamera(0);
@@ -166,7 +181,11 @@ struct TaskExecuteView {
     try {
       const response = await HttpUtil.get(`/agv/flaw/live/${this.taskId}`);
       if (response.code === 200) {
-        const newFlaws = response.data?.flaws || [];
+        interface FlawData {
+          flaws?: LiveFlaw[];
+        }
+        const flawData = response.data as FlawData;
+        const newFlaws = flawData?.flaws || [];
         
         // 检查是否有新故障
         if (newFlaws.length > this.liveFlaws.length) {
@@ -335,7 +354,7 @@ struct TaskExecuteView {
         }
         .width('100%')
         .height('100%')
-        .justifyContent(FlexAlign.Center)
+
         .alignItems(HorizontalAlign.Center)
       } else {
         // 主要内容
@@ -346,8 +365,7 @@ struct TaskExecuteView {
             Stack() {
               if (this.videoUrl) {
                 Video({
-                  src: this.videoUrl,
-                  previewUri: $r('app.media.video_placeholder')
+                  src: this.videoUrl
                 })
                   .width('100%')
                   .height(450)
@@ -367,7 +385,7 @@ struct TaskExecuteView {
                 }
                 .width('100%')
                 .height(450)
-                .justifyContent(FlexAlign.Center)
+          
                 .alignItems(HorizontalAlign.Center)
                 .backgroundColor('#f5f5f5')
               }
@@ -414,7 +432,7 @@ struct TaskExecuteView {
             }
             .width('100%')
             .padding(15)
-            .justifyContent(FlexAlign.Center)
+      
 
             // 控制按钮
             Row() {
@@ -765,8 +783,6 @@ struct TaskExecuteView {
       .width('100%')
       .height('100%')
       .backgroundColor('rgba(0,0,0,0.5)')
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
       .onClick(() => this.closeFlawDetail())
     }
   }

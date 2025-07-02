@@ -80,7 +80,11 @@ struct TaskDetailView {
     try {
       const response = await HttpUtil.get(`/agv/flaw/list?taskId=${this.taskId}`);
       if (response.code === 200) {
-        this.flaws = response.data?.rows || [];
+        interface FlawResponseData {
+          rows?: Flaw[];
+        }
+        const flawData = response.data as FlawResponseData;
+        this.flaws = flawData?.rows || [];
         this.updateFlawCounts();
       }
     } catch (error) {
@@ -112,7 +116,12 @@ struct TaskDetailView {
 
   async updateFlawStatus(flawId: number, status: FlawStatus, remark?: string) {
     try {
-      const updateData = {
+      interface UpdateData {
+        id: number;
+        status: FlawStatus;
+        remark?: string;
+      }
+      const updateData: UpdateData = {
         id: flawId,
         status: status,
         remark: remark
@@ -219,7 +228,7 @@ struct TaskDetailView {
           // 左侧图片区域
           Column() {
             if (this.flaws.length > 0 && this.currentFlawIndex < this.flaws.length) {
-              Image(this.flaws[this.currentFlawIndex].flawImage || $r('app.media.placeholder'))
+              Image(this.flaws[this.currentFlawIndex].flawImage || '')
                 .width('100%')
                 .height(400)
                 .objectFit(ImageFit.Contain)
@@ -300,17 +309,7 @@ struct TaskDetailView {
                 .width('100%')
                 .margin({ bottom: 8 })
 
-                Row() {
-                  Text('巡检距离:')
-                    .fontSize(14)
-                    .fontColor(AppConstants.COLORS.TEXT_REGULAR)
-                    .width(80)
-                  Text(`${this.task.distance}米`)
-                    .fontSize(14)
-                    .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
-                }
-                .width('100%')
-                .margin({ bottom: 8 })
+
 
                 Row() {
                   Text('执行人:')
@@ -477,7 +476,7 @@ struct TaskDetailView {
             // 模态框内容
             Column() {
               // 故障图片
-              Image(this.selectedFlaw.flawImage || $r('app.media.placeholder'))
+              Image(this.selectedFlaw.flawImage || '')
                 .width('100%')
                 .height(300)
                 .objectFit(ImageFit.Contain)
@@ -578,8 +577,6 @@ struct TaskDetailView {
         .width('100%')
         .height('100%')
         .backgroundColor('rgba(0,0,0,0.5)')
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
         .onClick(() => this.closeFlawDetail())
       }
     }

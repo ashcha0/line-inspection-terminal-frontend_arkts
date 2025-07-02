@@ -1,64 +1,36 @@
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
-import { HttpUtil } from '../utils/HttpUtil';
+import { TaskService, AgvTask, PageParam } from '../services/TaskService';
 import { AppConstants } from '../constants/AppConstants';
 
-// 任务接口
-interface Task {
-  id: number;
-  taskNo: string;
-  taskName: string;
-  startLocation: string;
-  endLocation: string;
-  distance: number;
-  creator: string;
-  executor: string;
-  status: string;
-  createTime: string;
-  remark?: string;
-}
-
-// 搜索条件接口
+// 使用TaskService中定义的接口
 interface SearchParams {
-  taskNo?: string;
+  taskCode?: string;
   creator?: string;
   executor?: string;
-  status?: string;
-}
-
-// 任务数据接口
-interface TaskData {
-  taskName: string;
-  taskNo?: string;
-  startLocation: string;
-  endLocation: string;
-  distance: number;
-  creator: string;
-  executor: string;
-  remark?: string;
+  taskStatus?: string;
 }
 
 @Entry
 @Component
 struct TaskView {
-  @State tasks: Task[] = [];
+  @State tasks: AgvTask[] = [];
   @State loading: boolean = true;
   @State showAddTask: boolean = false;
   @State searchParams: SearchParams = {};
-  @State newTask: Partial<Task> = {};
+  @State newTask: Partial<AgvTask> = {};
   
   // 搜索表单状态
-  @State searchTaskNo: string = '';
+  @State searchTaskCode: string = '';
   @State searchCreator: string = '';
   @State searchExecutor: string = '';
-  @State searchStatus: string = '';
+  @State searchTaskStatus: string = '';
   
   // 新增任务表单状态
   @State taskName: string = '';
-  @State taskNo: string = '';
-  @State startLocation: string = '';
-  @State endLocation: string = '';
-  @State distance: string = '';
+  @State taskCode: string = '';
+  @State startPos: string = '';
+  @State taskTrip: string = '';
   @State creator: string = '';
   @State executor: string = '';
   @State remark: string = '';
@@ -70,32 +42,23 @@ struct TaskView {
   async loadTasks(): Promise<void> {
     try {
       this.loading = true;
-      let queryString = '';
-      const params: string[] = [];
+      const params: PageParam = {
+        pageNum: 1,
+        pageSize: 100,
+        taskCode: this.searchParams.taskCode,
+        creator: this.searchParams.creator,
+        executor: this.searchParams.executor,
+        taskStatus: this.searchParams.taskStatus
+      };
       
-      if (this.searchParams.taskNo) {
-        params.push(`taskNo=${encodeURIComponent(this.searchParams.taskNo)}`);
-      }
-      if (this.searchParams.creator) {
-        params.push(`creator=${encodeURIComponent(this.searchParams.creator)}`);
-      }
-      if (this.searchParams.executor) {
-        params.push(`executor=${encodeURIComponent(this.searchParams.executor)}`);
-      }
-      if (this.searchParams.status) {
-        params.push(`status=${encodeURIComponent(this.searchParams.status)}`);
-      }
+      const response = await TaskService.listTask(params);
       
-      if (params.length > 0) {
-        queryString = '?' + params.join('&');
+      interface ResponseWithCode {
+        code: number;
       }
-      
-      const url = `/agv/task/list${queryString}`;
-      const response = await HttpUtil.get(url);
-      
-      if (response.code === 200 && response.data && typeof response.data === 'object') {
-        const data = response.data as Record<string, Object>;
-        this.tasks = (data['rows'] as Task[]) || [];
+      const responseWithCode = response as ResponseWithCode;
+      if (responseWithCode.code === 200) {
+        this.tasks = response.rows || [];
       }
     } catch (error) {
       console.error('加载任务列表失败:', error);
@@ -110,19 +73,19 @@ struct TaskView {
 
   searchTasks() {
     this.searchParams = {
-      taskNo: this.searchTaskNo || undefined,
+      taskCode: this.searchTaskCode || undefined,
       creator: this.searchCreator || undefined,
       executor: this.searchExecutor || undefined,
-      status: this.searchStatus || undefined
+      taskStatus: this.searchTaskStatus || undefined
     };
     this.loadTasks();
   }
 
   resetSearch() {
-    this.searchTaskNo = '';
+    this.searchTaskCode = '';
     this.searchCreator = '';
     this.searchExecutor = '';
-    this.searchStatus = '';
+    this.searchTaskStatus = '';
     this.searchParams = {};
     this.loadTasks();
   }
@@ -139,10 +102,9 @@ struct TaskView {
 
   clearTaskForm() {
     this.taskName = '';
-    this.taskNo = '';
-    this.startLocation = '';
-    this.endLocation = '';
-    this.distance = '';
+    this.taskCode = '';
+    this.startPos = '';
+    this.taskTrip = '';
     this.creator = '';
     this.executor = '';
     this.remark = '';
@@ -150,7 +112,7 @@ struct TaskView {
 
   async addTask() {
     // 表单验证
-    if (!this.taskName || !this.startLocation || !this.endLocation || !this.distance || !this.creator || !this.executor) {
+    if (!this.taskName || !this.startPos || !this.taskTrip || !this.creator || !this.executor) {
       promptAction.showToast({
         message: '请填写所有必填字段',
         duration: 2000
@@ -159,18 +121,20 @@ struct TaskView {
     }
 
     try {
-      const taskData: TaskData = {
+      const taskData: Partial<AgvTask> = {
         taskName: this.taskName,
-        taskNo: this.taskNo || undefined,
-        startLocation: this.startLocation,
-        endLocation: this.endLocation,
-        distance: parseInt(this.distance),
+        taskCode: this.taskCode || undefined,
+        startPos: this.startPos,
+        taskTrip: this.taskTrip,
         creator: this.creator,
         executor: this.executor,
         remark: this.remark || undefined
       };
 
-      const response = await HttpUtil.post('/agv/task', taskData);
+      interface ResponseWithCode {
+        code: number;
+      }
+      const response = await TaskService.addTask(taskData) as ResponseWithCode;
       
       if (response.code === 200) {
         promptAction.showToast({
@@ -192,9 +156,13 @@ struct TaskView {
 
   async deleteTask(taskId: number) {
     try {
-      const response = await HttpUtil.delete(`/agv/task/${taskId}`);
+      const response = await TaskService.delTask(taskId);
       
-      if (response.code === 200) {
+      interface ResponseWithCode {
+        code: number;
+      }
+      const responseWithCode = response as ResponseWithCode;
+      if (responseWithCode.code === 200) {
         promptAction.showToast({
           message: '任务删除成功',
           duration: 2000
@@ -213,9 +181,13 @@ struct TaskView {
 
   async startTask(taskId: number) {
     try {
-      const response = await HttpUtil.post(`/agv/task/start/${taskId}`);
+      const response = await TaskService.startTask(taskId);
       
-      if (response.code === 200) {
+      interface ResponseWithCode {
+        code: number;
+      }
+      const responseWithCode = response as ResponseWithCode;
+      if (responseWithCode.code === 200) {
         promptAction.showToast({
           message: '任务启动成功',
           duration: 2000
@@ -247,8 +219,8 @@ struct TaskView {
     });
   }
 
-  getStatusColor(status: string): string {
-    switch (status) {
+  getStatusColor(taskStatus: string): string {
+    switch (taskStatus) {
       case AppConstants.TASK_STATUS.PENDING:
         return '#e6a23c';
       case AppConstants.TASK_STATUS.RUNNING:
@@ -262,8 +234,8 @@ struct TaskView {
     }
   }
 
-  getStatusText(status: string): string {
-    switch (status) {
+  getStatusText(taskStatus: string): string {
+    switch (taskStatus) {
       case AppConstants.TASK_STATUS.PENDING:
         return '待巡视';
       case AppConstants.TASK_STATUS.RUNNING:
@@ -273,7 +245,7 @@ struct TaskView {
       case AppConstants.TASK_STATUS.COMPLETED:
         return '已完成';
       default:
-        return status;
+        return taskStatus;
     }
   }
 
@@ -323,7 +295,7 @@ struct TaskView {
             TextInput({ placeholder: '请输入任务编号' })
               .fontSize(14)
               .onChange((value: string) => {
-                this.searchTaskNo = value;
+                this.searchTaskCode = value;
               })
           }
           .layoutWeight(1)
@@ -369,7 +341,23 @@ struct TaskView {
                .selected(0)
                .value('全部')
                .onSelect((index: number, value: string) => {
-                 this.searchStatus = index === 0 ? '' : value;
+                 switch (index) {
+                   case 0:
+                     this.searchTaskStatus = '';
+                     break;
+                   case 1:
+                     this.searchTaskStatus = AppConstants.TASK_STATUS.PENDING;
+                     break;
+                   case 2:
+                     this.searchTaskStatus = AppConstants.TASK_STATUS.RUNNING;
+                     break;
+                   case 3:
+                     this.searchTaskStatus = AppConstants.TASK_STATUS.UPLOADING;
+                     break;
+                   case 4:
+                     this.searchTaskStatus = AppConstants.TASK_STATUS.COMPLETED;
+                     break;
+                 }
                })
           }
           .layoutWeight(1)
@@ -455,25 +443,18 @@ struct TaskView {
                 .layoutWeight(1)
                 .textAlign(TextAlign.Center)
               
-              Text('起始地点')
+              Text('起始位置')
                 .fontSize(14)
                 .fontWeight(FontWeight.Bold)
                 .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
                 .width(100)
                 .textAlign(TextAlign.Center)
               
-              Text('结束地点')
+              Text('任务行程')
                 .fontSize(14)
                 .fontWeight(FontWeight.Bold)
                 .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
-                .width(100)
-                .textAlign(TextAlign.Center)
-              
-              Text('距离(m)')
-                .fontSize(14)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
-                .width(80)
+                .width(120)
                 .textAlign(TextAlign.Center)
               
               Text('创建人')
@@ -512,10 +493,10 @@ struct TaskView {
           }
 
           // 数据行
-          ForEach(this.tasks, (task: Task, index: number) => {
+          ForEach(this.tasks, (task: AgvTask, index: number) => {
             ListItem() {
               Row() {
-                Text(task.taskNo)
+                Text(task.taskCode)
                   .fontSize(14)
                   .fontColor(AppConstants.COLORS.PRIMARY)
                   .width(120)
@@ -529,22 +510,16 @@ struct TaskView {
                   .layoutWeight(1)
                   .textAlign(TextAlign.Center)
                 
-                Text(task.startLocation)
+                Text(task.startPos)
                   .fontSize(14)
                   .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
                   .width(100)
                   .textAlign(TextAlign.Center)
                 
-                Text(task.endLocation)
+                Text(task.taskTrip)
                   .fontSize(14)
                   .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
-                  .width(100)
-                  .textAlign(TextAlign.Center)
-                
-                Text(task.distance.toString())
-                  .fontSize(14)
-                  .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
-                  .width(80)
+                  .width(120)
                   .textAlign(TextAlign.Center)
                 
                 Text(task.creator)
@@ -559,17 +534,17 @@ struct TaskView {
                   .width(80)
                   .textAlign(TextAlign.Center)
                 
-                Text(this.getStatusText(task.status))
+                Text(this.getStatusText(task.taskStatus))
                   .fontSize(12)
                   .fontColor('#ffffff')
-                  .backgroundColor(this.getStatusColor(task.status))
+                  .backgroundColor(this.getStatusColor(task.taskStatus))
                   .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                   .borderRadius(12)
                   .width(80)
                   .textAlign(TextAlign.Center)
                 
                 Row() {
-                  if (task.status === AppConstants.TASK_STATUS.PENDING) {
+                  if (task.taskStatus === AppConstants.TASK_STATUS.PENDING) {
                     Button('启动')
                       .fontSize(12)
                       .fontColor('#ffffff')
@@ -584,7 +559,7 @@ struct TaskView {
                       .border({ width: 1, color: '#f56c6c' })
                       .margin({ left: 5 })
                       .onClick(() => this.deleteTask(task.id))
-                  } else if (task.status === AppConstants.TASK_STATUS.UPLOADING) {
+                  } else if (task.taskStatus === AppConstants.TASK_STATUS.UPLOADING) {
                     Button('上传')
                       .fontSize(12)
                       .fontColor('#ffffff')
@@ -614,7 +589,7 @@ struct TaskView {
               .backgroundColor(index % 2 === 0 ? '#ffffff' : '#f8f9fa')
               .border({ width: { bottom: 1 }, color: '#eeeeee' })
             }
-          }, (task: Task) => task.id.toString())
+          }, (task: AgvTask) => task.id.toString())
         }
         .width('100%')
         .layoutWeight(1)
@@ -671,7 +646,7 @@ struct TaskView {
                     TextInput({ placeholder: '留空自动生成' })
                       .fontSize(14)
                       .onChange((value: string) => {
-                        this.taskNo = value;
+                        this.taskCode = value;
                       })
                   }
                   .layoutWeight(1)
@@ -682,14 +657,14 @@ struct TaskView {
 
                 Row() {
                   Column() {
-                    Text('起始地点 *')
+                    Text('起始位置 *')
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入起始地点' })
+                    TextInput({ placeholder: '请输入起始位置' })
                       .fontSize(14)
                       .onChange((value: string) => {
-                        this.startLocation = value;
+                        this.startPos = value;
                       })
                   }
                   .layoutWeight(1)
@@ -697,14 +672,14 @@ struct TaskView {
                   .margin({ right: 15 })
 
                   Column() {
-                    Text('结束地点 *')
+                    Text('任务行程 *')
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入结束地点' })
+                    TextInput({ placeholder: '请输入任务行程' })
                       .fontSize(14)
                       .onChange((value: string) => {
-                        this.endLocation = value;
+                        this.taskTrip = value;
                       })
                   }
                   .layoutWeight(1)
@@ -714,22 +689,6 @@ struct TaskView {
                 .margin({ bottom: 20 })
 
                 Row() {
-                  Column() {
-                    Text('任务距离(米) *')
-                      .fontSize(14)
-                      .fontColor(AppConstants.COLORS.TEXT_REGULAR)
-                      .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入任务距离' })
-                      .fontSize(14)
-                      .type(InputType.Number)
-                      .onChange((value: string) => {
-                        this.distance = value;
-                      })
-                  }
-                  .layoutWeight(1)
-                  .alignItems(HorizontalAlign.Start)
-                  .margin({ right: 15 })
-
                   Column() {
                     Text('创建人 *')
                       .fontSize(14)
@@ -743,24 +702,26 @@ struct TaskView {
                   }
                   .layoutWeight(1)
                   .alignItems(HorizontalAlign.Start)
+                  .margin({ right: 15 })
+
+                  Column() {
+                    Text('执行人 *')
+                      .fontSize(14)
+                      .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                      .margin({ bottom: 5 })
+                    TextInput({ placeholder: '请输入执行人' })
+                      .fontSize(14)
+                      .onChange((value: string) => {
+                        this.executor = value;
+                      })
+                  }
+                  .layoutWeight(1)
+                  .alignItems(HorizontalAlign.Start)
                 }
                 .width('100%')
                 .margin({ bottom: 20 })
 
-                Column() {
-                  Text('执行人 *')
-                    .fontSize(14)
-                    .fontColor(AppConstants.COLORS.TEXT_REGULAR)
-                    .margin({ bottom: 5 })
-                  TextInput({ placeholder: '请输入执行人' })
-                    .fontSize(14)
-                    .onChange((value: string) => {
-                      this.executor = value;
-                    })
-                }
-                .width('100%')
-                .alignItems(HorizontalAlign.Start)
-                .margin({ bottom: 20 })
+
 
                 Column() {
                   Text('备注')
