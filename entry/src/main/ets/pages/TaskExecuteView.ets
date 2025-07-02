@@ -270,20 +270,36 @@ struct TaskExecuteView {
       
       if (response.code === 200) {
         const actionText = action === 'forward' ? '前进' : action === 'stop' ? '停止' : '后退';
-        promptAction.showToast({
-          message: `车辆${actionText}指令已发送`,
-          duration: 2000
-        });
         console.info(`[TaskExecuteView] ✅ 车辆${actionText}指令发送成功`);
+        
+        // 使用setTimeout确保在UI上下文中执行Toast
+        setTimeout(() => {
+          try {
+            promptAction.showToast({
+              message: `车辆${actionText}指令已发送`,
+              duration: 2000
+            });
+          } catch (toastError) {
+            console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+          }
+        }, 0);
       } else {
         throw new Error(`控制指令返回错误: ${response.msg || '未知错误'}`);
       }
     } catch (error) {
       console.error('[TaskExecuteView] ❌ 控制车辆失败:', error);
-      promptAction.showToast({
-        message: '控制指令发送失败',
-        duration: 2000
-      });
+      
+      // 使用setTimeout确保在UI上下文中执行Toast
+      setTimeout(() => {
+        try {
+          promptAction.showToast({
+            message: '控制指令发送失败',
+            duration: 2000
+          });
+        } catch (toastError) {
+          console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+        }
+      }, 0);
     }
   }
 
@@ -660,7 +676,7 @@ struct TaskExecuteView {
                 .layoutWeight(1)
 
                 Column() {
-                  Text(`${this.vehicleStatus.position}%`)
+                  Text(`${Math.min(Math.max(Math.round(this.vehicleStatus.position / 10), 0), 100)}%`)
                     .fontSize(16)
                     .fontWeight(FontWeight.Bold)
                     .fontColor(AppConstants.COLORS.PRIMARY)
@@ -698,7 +714,7 @@ struct TaskExecuteView {
 
                 // 进度条填充
                 Row()
-                  .width(`${this.vehicleStatus.position}%`)
+                  .width(`${Math.min(Math.max(Math.round(this.vehicleStatus.position / 10), 0), 100)}%`)
                   .height(8)
                   .backgroundColor(AppConstants.COLORS.PRIMARY)
                   .borderRadius(4)
@@ -706,7 +722,7 @@ struct TaskExecuteView {
                 // 车辆位置标记
                 Text('🚛')
                   .fontSize(20)
-                  .position({ x: `${this.vehicleStatus.position}%`, y: -6 })
+                  .position({ x: `${Math.min(Math.max(Math.round(this.vehicleStatus.position / 10), 0), 100)}%`, y: -6 })
 
                 // 故障标记
                 ForEach(this.liveFlaws, (flaw: LiveFlaw) => {
