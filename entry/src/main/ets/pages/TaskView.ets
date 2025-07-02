@@ -25,6 +25,7 @@ struct TaskView {
   @State searchCreator: string = '';
   @State searchExecutor: string = '';
   @State searchTaskStatus: string = '';
+  @State selectedStatusIndex: number = 0; // 状态选择器的选中索引
   
   // 新增任务表单状态
   @State taskName: string = '';
@@ -87,10 +88,12 @@ struct TaskView {
   }
 
   resetSearch() {
+    console.info('[TaskView] 🔄 重置搜索条件');
     this.searchTaskCode = '';
     this.searchCreator = '';
     this.searchExecutor = '';
     this.searchTaskStatus = '';
+    this.selectedStatusIndex = 0; // 重置状态选择器到"全部"
     this.searchParams = {};
     this.loadTasks();
   }
@@ -343,9 +346,14 @@ struct TaskView {
               .fontColor(AppConstants.COLORS.TEXT_REGULAR)
               .margin({ bottom: 5 })
             Select([{ value: '全部' }, { value: '待巡视' }, { value: '巡视中' }, { value: '待上传' }, { value: '已完成' }])
-               .selected(0)
-               .value('全部')
+               .selected(this.selectedStatusIndex)
+               .value(this.selectedStatusIndex === 0 ? '全部' : 
+                      this.selectedStatusIndex === 1 ? '待巡视' :
+                      this.selectedStatusIndex === 2 ? '巡视中' :
+                      this.selectedStatusIndex === 3 ? '待上传' : '已完成')
                .onSelect((index: number, value: string) => {
+                 console.info('[TaskView] 🎯 选择状态筛选:', index, value);
+                 this.selectedStatusIndex = index;
                  switch (index) {
                    case 0:
                      this.searchTaskStatus = '';

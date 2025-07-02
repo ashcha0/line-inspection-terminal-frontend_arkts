@@ -63,10 +63,10 @@ export class TaskService {
       
       let queryString = `pageNum=${params.pageNum}&pageSize=${params.pageSize}`;
       
-      if (params.taskCode) queryString += `&taskCode=${params.taskCode}`;
-      if (params.creator) queryString += `&creator=${params.creator}`;
-      if (params.executor) queryString += `&executor=${params.executor}`;
-      if (params.taskStatus) queryString += `&taskStatus=${params.taskStatus}`;
+      if (params.taskCode) queryString += `&taskCode=${encodeURIComponent(params.taskCode)}`;
+      if (params.creator) queryString += `&creator=${encodeURIComponent(params.creator)}`;
+      if (params.executor) queryString += `&executor=${encodeURIComponent(params.executor)}`;
+      if (params.taskStatus) queryString += `&taskStatus=${encodeURIComponent(params.taskStatus)}`;
       
       const response = await HttpUtil.get(`/agv/task/list?${queryString}`);
       console.info('[TaskService] 📋 原始响应数据:', JSON.stringify(response));
