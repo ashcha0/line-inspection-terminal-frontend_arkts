@@ -34,46 +34,75 @@ export class HttpUtil {
       const fullUrl = url.startsWith('http') ? url : `${HttpUtil.BASE_URL}${url}`;
       console.info(`[HttpUtil] 发起请求: ${fullUrl}`);
       
+      // 合并headers
+      const mergedHeaders: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      // 添加自定义headers
+      if (config.headers) {
+        const customHeaderKeys = Object.keys(config.headers);
+        for (let i = 0; i < customHeaderKeys.length; i++) {
+          const key = customHeaderKeys[i];
+          mergedHeaders[key] = config.headers[key];
+        }
+      }
+      
       const requestOptions: http.HttpRequestOptions = {
         method: config.method || http.RequestMethod.GET,
-        header: {
-          'Content-Type': 'application/json'
-        },
+        header: mergedHeaders,
         connectTimeout: config.timeout || HttpUtil.TIMEOUT,
         readTimeout: config.timeout || HttpUtil.TIMEOUT,
         extraData: config.data ? JSON.stringify(config.data) : undefined
       };
       
       console.info(`[HttpUtil] 请求配置:`, JSON.stringify(requestOptions));
-      
-      // 合并自定义headers
-      if (config.headers) {
-        const mergedHeaders: Record<string, string> = {};
-        // 复制默认headers
-        if (requestOptions.header) {
-          const defaultHeaderKeys = Object.keys(requestOptions.header);
-          for (let i = 0; i < defaultHeaderKeys.length; i++) {
-            const key = defaultHeaderKeys[i];
-            mergedHeaders[key] = requestOptions.header[key];
-          }
-        }
-        // 复制自定义headers
-        const customHeaderKeys = Object.keys(config.headers);
-        for (let i = 0; i < customHeaderKeys.length; i++) {
-          const key = customHeaderKeys[i];
-          mergedHeaders[key] = config.headers[key];
-        }
-        requestOptions.header = mergedHeaders;
-      }
 
       const response = await httpRequest.request(fullUrl, requestOptions);
       console.info(`[HttpUtil] 响应状态码: ${response.responseCode}`);
       console.info(`[HttpUtil] 响应内容: ${response.result}`);
       
       if (response.responseCode === 200) {
-        const result = JSON.parse(response.result as string) as HttpResponse<T>;
-        console.info(`[HttpUtil] 解析后的响应:`, JSON.stringify(result));
-        return result;
+        try {
+          const rawResult: Object = JSON.parse(response.result as string);
+          console.info(`[HttpUtil] 原始响应数据:`, JSON.stringify(rawResult));
+          
+          // 检查是否是标准的HttpResponse格式
+          if (rawResult && typeof rawResult === 'object') {
+            const resultObj = rawResult as Record<string, Object>;
+            if (resultObj.code !== undefined && resultObj.msg !== undefined) {
+              // 标准格式，直接返回
+              const result = rawResult as HttpResponse<T>;
+              console.info(`[HttpUtil] 标准格式响应:`, JSON.stringify(result));
+              return result;
+            } else {
+              // 非标准格式，包装成HttpResponse
+              const wrappedResult: HttpResponse<T> = {
+                code: 200,
+                msg: 'success',
+                data: rawResult as T
+              };
+              console.info(`[HttpUtil] 包装后的响应:`, JSON.stringify(wrappedResult));
+              return wrappedResult;
+            }
+          } else {
+            // 非对象类型，包装成HttpResponse
+            const wrappedResult: HttpResponse<T> = {
+              code: 200,
+              msg: 'success',
+              data: rawResult as T
+            };
+            console.info(`[HttpUtil] 包装后的响应:`, JSON.stringify(wrappedResult));
+            return wrappedResult;
+          }
+        } catch (parseError) {
+          console.error(`[HttpUtil] JSON解析失败:`, parseError);
+          return {
+            code: -1,
+            msg: 'JSON解析失败',
+            data: undefined
+          };
+        }
       } else {
         console.warn(`[HttpUtil] HTTP错误: ${response.responseCode}`);
         return {

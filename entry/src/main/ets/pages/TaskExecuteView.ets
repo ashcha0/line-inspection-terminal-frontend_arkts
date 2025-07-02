@@ -5,12 +5,21 @@ import { HttpUtil } from '../utils/HttpUtil';
 import { AppConstants } from '../constants/AppConstants';
 import { AgvMovementService } from '../services/AgvMovementService';
 import { AgvTask } from '../services/TaskService';
+import { CameraService, CameraInfo } from '../services/CameraService';
 
-// 摄像头接口
-interface Camera {
+// 摄像头接口（使用CameraService中的CameraInfo）
+type Camera = CameraInfo;
+
+// 摄像头信息项接口
+interface CameraInfoItem {
   id: string;
   name: string;
-  url: string;
+}
+
+// 摄像头加载日志信息接口
+interface CameraLoadLogInfo {
+  cameraCount: number;
+  cameras: CameraInfoItem[];
 }
 
 // 车辆状态接口
@@ -50,10 +59,13 @@ struct TaskExecuteView {
   @State isAudioEnabled: boolean = true;
   @State loading: boolean = true;
   @State isTaskRunning: boolean = false;
+  @State cameraConnectionStatus: string = '检测中...';
+  @State lastCameraCheck: string = '';
   
   private taskId: number = 0;
   private statusTimer: number = -1;
   private flawTimer: number = -1;
+  private cameraTimer: number = -1;
 
   aboutToAppear() {
     const params = router.getParams() as Record<string, Object>;
@@ -63,6 +75,7 @@ struct TaskExecuteView {
       this.loadCameras();
       this.startStatusPolling();
       this.startFlawPolling();
+      this.startCameraPolling();
     }
   }
 
@@ -90,48 +103,62 @@ struct TaskExecuteView {
 
   async loadCameras() {
     try {
-      // 使用完整的摄像头服务URL
-      const cameraUrl = `${AppConstants.CAMERA_BASE_URL}/devices?page=1&size=999`;
-      console.info('[TaskExecuteView] 📹 请求摄像头设备列表:', cameraUrl);
+      console.info('[TaskExecuteView] 📹 开始加载摄像头列表');
       
-      const response = await HttpUtil.request(cameraUrl, {
-        method: http.RequestMethod.GET,
-        headers: {
-          'Authorization': 'Basic YWRtaW4xMjM6QWRtaW5AMTIz',
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      });
+      // 使用CameraService获取摄像头信息列表
+      this.cameras = await CameraService.getCameraInfoList();
       
-      if (response.code === 200) {
-        interface DeviceItem {
-          id: string;
-        }
-        interface DeviceData {
-          rows?: DeviceItem[];
-        }
-        const deviceData = response.data as DeviceData;
-        const devices = deviceData?.rows || [];
-        interface CameraInfo {
-          id: string;
-          name: string;
-          url: string;
-        }
-        this.cameras = devices.map((device: DeviceItem, index: number) => {
-          const camera: CameraInfo = {
-            id: device.id,
-            name: `摄像头${index + 1}`,
-            url: `${AppConstants.WEBRTC_BASE_URL}/live/${device.id}_01.flv`
-          };
-          return camera;
-        });
+      const logInfo: CameraLoadLogInfo = {
+        cameraCount: this.cameras.length,
+        cameras: this.cameras.map((c: CameraInfo): CameraInfoItem => ({ id: c.id, name: c.name }))
+      };
+      console.info('[TaskExecuteView] ✅ 摄像头列表加载成功:', JSON.stringify(logInfo));
+      
+      // 如果有摄像头，默认选择第一个并开始播放
+      if (this.cameras.length > 0) {
+        this.switchCamera(0);
+        console.info('[TaskExecuteView] 🎥 默认选择第一个摄像头:', this.cameras[0].name);
         
-        if (this.cameras.length > 0) {
-          this.switchCamera(0);
-        }
+        // 显示成功提示
+        setTimeout(() => {
+          try {
+            promptAction.showToast({
+              message: `已连接${this.cameras.length}个摄像头，开始实时监控`,
+              duration: 2000
+            });
+          } catch (toastError) {
+            console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+          }
+        }, 0);
+      } else {
+        console.warn('[TaskExecuteView] ⚠️ 未发现可用摄像头');
+        
+        // 显示无摄像头提示
+        setTimeout(() => {
+          try {
+            promptAction.showToast({
+              message: '未发现可用摄像头，请检查设备连接',
+              duration: 3000
+            });
+          } catch (toastError) {
+            console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+          }
+        }, 0);
       }
     } catch (error) {
-      console.error('加载摄像头列表失败:', error);
+      console.error('[TaskExecuteView] ❌ 加载摄像头列表失败:', error);
+      
+      // 显示错误提示
+      setTimeout(() => {
+        try {
+          promptAction.showToast({
+            message: '摄像头服务连接失败，请检查网络连接和服务状态',
+            duration: 3000
+          });
+        } catch (toastError) {
+          console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+        }
+      }, 0);
     } finally {
       this.loading = false;
     }
@@ -141,6 +168,15 @@ struct TaskExecuteView {
     if (index >= 0 && index < this.cameras.length) {
       this.currentCameraIndex = index;
       this.videoUrl = this.cameras[index].url;
+      
+      console.info('[TaskExecuteView] 🔄 切换摄像头:', JSON.stringify({
+        cameraIndex: index,
+        cameraId: this.cameras[index].id,
+        cameraName: this.cameras[index].name,
+        videoUrl: this.videoUrl
+      }));
+    } else {
+      console.warn('[TaskExecuteView] ⚠️ 无效的摄像头索引:', index);
     }
   }
 
@@ -156,6 +192,12 @@ struct TaskExecuteView {
     }, 3000); // 每3秒检查一次故障
   }
 
+  startCameraPolling() {
+    this.cameraTimer = setInterval(() => {
+      this.checkCameraConnection();
+    }, 10000); // 每10秒检查一次摄像头连接状态
+  }
+
   stopPolling() {
     if (this.statusTimer !== -1) {
       clearInterval(this.statusTimer);
@@ -164,6 +206,10 @@ struct TaskExecuteView {
     if (this.flawTimer !== -1) {
       clearInterval(this.flawTimer);
       this.flawTimer = -1;
+    }
+    if (this.cameraTimer !== -1) {
+      clearInterval(this.cameraTimer);
+      this.cameraTimer = -1;
     }
   }
 
@@ -371,9 +417,48 @@ struct TaskExecuteView {
     }
   }
 
+  async checkCameraConnection() {
+    try {
+      console.info('[TaskExecuteView] 🔍 检查摄像头连接状态');
+      const isConnected = await CameraService.testConnection();
+      this.cameraConnectionStatus = isConnected ? '连接正常' : '连接异常';
+      this.lastCameraCheck = new Date().toLocaleTimeString();
+      
+      console.info('[TaskExecuteView] 📊 摄像头连接检查结果:', {
+        isConnected: isConnected,
+        checkTime: this.lastCameraCheck
+      });
+    } catch (error) {
+      console.error('[TaskExecuteView] ❌ 摄像头连接检查失败:', error);
+      this.cameraConnectionStatus = '检查失败';
+      this.lastCameraCheck = new Date().toLocaleTimeString();
+    }
+  }
+
   refreshVideo() {
-    if (this.cameras.length > 0) {
-      this.videoUrl = this.cameras[this.currentCameraIndex].url + '?t=' + Date.now();
+    if (this.cameras.length > 0 && this.currentCameraIndex >= 0) {
+      const currentCamera = this.cameras[this.currentCameraIndex];
+      this.videoUrl = CameraService.generateRefreshStreamUrl(currentCamera.id);
+      
+      console.info('[TaskExecuteView] 🔄 刷新视频流:', JSON.stringify({
+        cameraId: currentCamera.id,
+        cameraName: currentCamera.name,
+        refreshUrl: this.videoUrl
+      }));
+      
+      // 显示刷新提示
+      setTimeout(() => {
+        try {
+          promptAction.showToast({
+            message: `正在刷新${currentCamera.name}视频流`,
+            duration: 2000
+          });
+        } catch (toastError) {
+          console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+        }
+      }, 0);
+    } else {
+      console.warn('[TaskExecuteView] ⚠️ 无可用摄像头进行刷新');
     }
   }
 
@@ -395,6 +480,22 @@ struct TaskExecuteView {
         return '#e6a23c';
       default:
         return '#909399';
+    }
+  }
+
+  /**
+   * 获取摄像头状态颜色
+   * @param status 摄像头状态
+   * @returns 状态对应的颜色
+   */
+  getStatusColor(status: string): string {
+    switch (status) {
+      case 'online':
+        return AppConstants.COLORS.SUCCESS;
+      case 'offline':
+        return AppConstants.COLORS.DANGER;
+      default:
+        return AppConstants.COLORS.WARNING;
     }
   }
 
@@ -445,9 +546,36 @@ struct TaskExecuteView {
         Row() {
           // 左侧视频区域
           Column() {
+            // 摄像头连接状态信息
+            Row() {
+              Text('摄像头服务:')
+                .fontSize(12)
+                .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+              
+              Text(this.cameraConnectionStatus)
+                .fontSize(12)
+                .fontColor(this.cameraConnectionStatus === '连接正常' ? AppConstants.COLORS.SUCCESS : AppConstants.COLORS.DANGER)
+                .margin({ left: 8 })
+              
+              if (this.lastCameraCheck) {
+                Text(`(${this.lastCameraCheck})`)
+                  .fontSize(10)
+                  .fontColor(AppConstants.COLORS.TEXT_SECONDARY)
+                  .margin({ left: 5 })
+              }
+              
+              Text(`视频源: ${this.cameras.length}个`)
+                .fontSize(12)
+                .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                .margin({ left: 15 })
+            }
+            .width('100%')
+            .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+            .backgroundColor('#f8f9fa')
+            .border({ width: { bottom: 1 }, color: '#eeeeee' })
             // 视频播放器
             Stack() {
-              if (this.videoUrl) {
+              if (this.videoUrl && this.cameras.length > 0) {
                 Video({
                   src: this.videoUrl
                 })
@@ -457,19 +585,48 @@ struct TaskExecuteView {
                   .controls(false)
                   .objectFit(ImageFit.Contain)
                   .backgroundColor('#000000')
+                  .onStart(() => {
+                    console.info('[TaskExecuteView] ▶️ 视频开始播放:', this.cameras[this.currentCameraIndex]?.name);
+                  })
+                  .onPause(() => {
+                    console.info('[TaskExecuteView] ⏸️ 视频暂停');
+                  })
+                  .onFinish(() => {
+                    console.info('[TaskExecuteView] 🔚 视频播放结束');
+                  })
+                  .onError(() => {
+                    console.error('[TaskExecuteView] ❌ 视频播放错误');
+                    setTimeout(() => {
+                      try {
+                        promptAction.showToast({
+                          message: `视频流连接失败，请检查网络或重新刷新`,
+                          duration: 3000
+                        });
+                      } catch (toastError) {
+                        console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+                      }
+                    }, 0);
+                  })
               } else {
                 Column() {
                   Text('📹')
                     .fontSize(48)
                     .fontColor('#cccccc')
-                  Text('视频加载中...')
+                  Text(this.cameras.length === 0 ? '无可用摄像头' : '正在连接视频流...')
                     .fontSize(16)
                     .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                     .margin({ top: 10 })
+                  
+                  if (this.cameras.length === 0) {
+                    Text('请检查摄像头设备连接状态')
+                      .fontSize(12)
+                      .fontColor(AppConstants.COLORS.TEXT_SECONDARY)
+                      .margin({ top: 5 })
+                  }
                 }
                 .width('100%')
                 .height(450)
-          
+                .justifyContent(FlexAlign.Center)
                 .alignItems(HorizontalAlign.Center)
                 .backgroundColor('#f5f5f5')
               }
@@ -482,6 +639,7 @@ struct TaskExecuteView {
                   .backgroundColor('rgba(0,0,0,0.6)')
                   .border({ width: 1, color: 'rgba(255,255,255,0.3)' })
                   .borderRadius(4)
+                  .enabled(this.cameras.length > 0)
                   .onClick(() => this.refreshVideo())
 
                 Button(this.isAudioEnabled ? '🔊' : '🔇')
@@ -491,9 +649,32 @@ struct TaskExecuteView {
                   .border({ width: 1, color: 'rgba(255,255,255,0.3)' })
                   .borderRadius(4)
                   .margin({ left: 10 })
+                  .enabled(this.cameras.length > 0)
                   .onClick(() => {
                     this.isAudioEnabled = !this.isAudioEnabled;
+                    const statusText = this.isAudioEnabled ? '音频已开启' : '音频已关闭';
+                    setTimeout(() => {
+                      try {
+                        promptAction.showToast({
+                          message: statusText,
+                          duration: 1500
+                        });
+                      } catch (toastError) {
+                        console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
+                      }
+                    }, 0);
                   })
+                
+                // 显示当前摄像头状态
+                if (this.cameras.length > 0 && this.currentCameraIndex >= 0) {
+                  Text(`📹 ${this.cameras[this.currentCameraIndex].name}`)
+                    .fontSize(12)
+                    .fontColor('#ffffff')
+                    .backgroundColor('rgba(0,0,0,0.6)')
+                    .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                    .borderRadius(4)
+                    .margin({ left: 10 })
+                }
               }
               .position({ x: 10, y: 10 })
             }
@@ -502,20 +683,49 @@ struct TaskExecuteView {
             .border({ width: 1, color: '#dddddd' })
 
             // 摄像头切换
-            Row() {
-              ForEach(this.cameras, (camera: Camera, index: number) => {
-                Button(camera.name)
+            if (this.cameras.length > 0) {
+              Column() {
+                Text(`摄像头列表 (${this.cameras.length}个)`)
                   .fontSize(14)
-                  .fontColor(index === this.currentCameraIndex ? '#ffffff' : AppConstants.COLORS.TEXT_PRIMARY)
-                  .backgroundColor(index === this.currentCameraIndex ? AppConstants.COLORS.PRIMARY : '#ffffff')
-                  .border({ width: 1, color: index === this.currentCameraIndex ? AppConstants.COLORS.PRIMARY : '#dddddd' })
-                  .borderRadius(4)
-                  .margin({ right: 10 })
-                  .onClick(() => this.switchCamera(index))
-              }, (camera: Camera) => camera.id)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+                  .margin({ bottom: 10 })
+                
+                Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+                  ForEach(this.cameras, (camera: Camera, index: number) => {
+                    Button() {
+                      Column() {
+                        Text(camera.name)
+                          .fontSize(12)
+                          .fontColor(index === this.currentCameraIndex ? '#ffffff' : AppConstants.COLORS.TEXT_PRIMARY)
+                          .maxLines(1)
+                          .textOverflow({ overflow: TextOverflow.Ellipsis })
+                        
+                        Text(camera.status || 'unknown')
+                          .fontSize(10)
+                          .fontColor(index === this.currentCameraIndex ? 'rgba(255,255,255,0.8)' : this.getStatusColor(camera.status || 'unknown'))
+                          .margin({ top: 2 })
+                      }
+                      .alignItems(HorizontalAlign.Center)
+                    }
+                    .backgroundColor(index === this.currentCameraIndex ? AppConstants.COLORS.PRIMARY : '#ffffff')
+                    .border({ 
+                      width: 1, 
+                      color: index === this.currentCameraIndex ? AppConstants.COLORS.PRIMARY : '#dddddd' 
+                    })
+                    .borderRadius(6)
+                    .margin({ right: 8, bottom: 8 })
+                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                    .onClick(() => this.switchCamera(index))
+                  }, (camera: Camera) => camera.id)
+                }
+                .width('100%')
+              }
+              .width('100%')
+              .padding(15)
+              .backgroundColor('#f8f9fa')
+              .border({ width: { top: 1 }, color: '#eeeeee' })
             }
-            .width('100%')
-            .padding(15)
       
 
             // 控制按钮

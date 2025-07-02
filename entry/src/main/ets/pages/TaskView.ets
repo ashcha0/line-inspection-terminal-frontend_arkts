@@ -771,6 +771,18 @@ struct TaskView {
             })
             .margin({ right: 10 })
           
+          Button('📹')
+            .fontSize(16)
+            .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+            .backgroundColor('transparent')
+            .onClick(() => {
+              console.info('[TaskView] 📹 跳转到摄像头测试页面');
+              router.pushUrl({
+                url: 'pages/CameraTestView'
+              });
+            })
+            .margin({ right: 10 })
+          
           Button('⚙️')
             .fontSize(16)
             .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
