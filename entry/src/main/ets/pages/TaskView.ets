@@ -39,6 +39,12 @@ struct TaskView {
   // 编辑任务相关状态
   @State isEditMode: boolean = false;
   @State editingTaskId: number = 0;
+  
+  // 上传任务相关状态
+  @State uploadingTasks: Set<number> = new Set();
+  @State showUploadProgress: boolean = false;
+  @State uploadProgress: number = 0;
+  @State currentUploadTaskId: number = 0;
 
   aboutToAppear() {
     this.loadTasks();
@@ -445,32 +451,237 @@ struct TaskView {
 
   async startTask(taskId: number) {
     try {
+      console.info('[TaskView] 🚀 开始启动任务，ID:', taskId);
       const response = await TaskService.startTask(taskId);
       
       interface ResponseWithCode {
         code: number;
+        msg?: string;
       }
       const responseWithCode = response as ResponseWithCode;
       if (responseWithCode.code === 200) {
+        console.info('[TaskView] ✅ 任务启动成功，准备刷新列表');
+        
+        // 先刷新任务列表以获取最新状态
+        try {
+          await this.loadTasks();
+          console.info('[TaskView] 🔄 任务列表刷新完成');
+        } catch (refreshError) {
+          console.error('[TaskView] ❌ 刷新任务列表失败:', refreshError);
+        }
+        
+        // 使用try-catch包装UI操作，避免UI上下文错误
+        try {
+          promptAction.showToast({
+            message: '任务启动成功',
+            duration: 2000
+          });
+          
+          // 跳转到任务执行页面
+          router.pushUrl({
+            url: 'pages/TaskExecuteView',
+            params: {
+              taskId: taskId
+            }
+          });
+        } catch (uiError) {
+          console.error('[TaskView] ❌ UI操作失败:', uiError);
+        }
+      } else {
+        console.error('[TaskView] ❌ 任务启动失败，错误码:', responseWithCode.code, '错误信息:', responseWithCode.msg);
+        
+        // 任务启动失败时，也需要刷新任务列表以确保状态同步
+        try {
+          await this.loadTasks();
+          console.info('[TaskView] 🔄 任务列表刷新完成（启动失败后）');
+        } catch (refreshError) {
+          console.error('[TaskView] ❌ 刷新任务列表失败（启动失败后）:', refreshError);
+        }
+        
+        // 任务启动失败时，避免执行可能导致UI上下文错误的操作
+        try {
+          promptAction.showToast({
+            message: responseWithCode.msg || '启动任务失败',
+            duration: 2000
+          });
+        } catch (uiError) {
+          console.error('[TaskView] ❌ 显示错误提示失败:', uiError);
+        }
+      }
+    } catch (error) {
+      console.error('[TaskView] ❌ 启动任务异常:', error);
+      
+      // 异常情况下，也需要刷新任务列表以确保状态同步
+      try {
+        await this.loadTasks();
+        console.info('[TaskView] 🔄 任务列表刷新完成（异常后）');
+      } catch (refreshError) {
+        console.error('[TaskView] ❌ 刷新任务列表失败（异常后）:', refreshError);
+      }
+      
+      // 异常情况下，避免执行可能导致UI上下文错误的操作
+      try {
         promptAction.showToast({
-          message: '任务启动成功',
+          message: '启动任务失败，请重试',
+          duration: 2000
+        });
+      } catch (uiError) {
+        console.error('[TaskView] ❌ 显示异常提示失败:', uiError);
+      }
+    }
+  }
+
+  async endTask(taskId: number) {
+    try {
+      console.info('[TaskView] 🛑 开始结束任务，ID:', taskId);
+      const response = await TaskService.endTask(taskId, false); // false表示正常完成，不是中止
+      
+      interface ResponseWithCode {
+        code: number;
+        msg?: string;
+      }
+      const responseWithCode = response as ResponseWithCode;
+      if (responseWithCode.code === 200) {
+        console.info('[TaskView] ✅ 任务结束成功，准备刷新列表');
+        
+        // 刷新任务列表以获取最新状态
+        try {
+          await this.loadTasks();
+          console.info('[TaskView] 🔄 任务列表刷新完成');
+        } catch (refreshError) {
+          console.error('[TaskView] ❌ 刷新任务列表失败:', refreshError);
+        }
+        
+        // 使用try-catch包装UI操作，避免UI上下文错误
+        try {
+          promptAction.showToast({
+            message: '任务结束成功',
+            duration: 2000
+          });
+        } catch (uiError) {
+          console.error('[TaskView] ❌ UI操作失败:', uiError);
+        }
+      } else {
+        console.error('[TaskView] ❌ 任务结束失败，错误码:', responseWithCode.code, '错误信息:', responseWithCode.msg);
+        
+        // 任务结束失败时，也需要刷新任务列表以确保状态同步
+        try {
+          await this.loadTasks();
+          console.info('[TaskView] 🔄 任务列表刷新完成（结束失败后）');
+        } catch (refreshError) {
+          console.error('[TaskView] ❌ 刷新任务列表失败（结束失败后）:', refreshError);
+        }
+        
+        // 显示错误提示
+        try {
+          promptAction.showToast({
+            message: responseWithCode.msg || '结束任务失败',
+            duration: 2000
+          });
+        } catch (uiError) {
+          console.error('[TaskView] ❌ 显示错误提示失败:', uiError);
+        }
+      }
+    } catch (error) {
+      console.error('[TaskView] ❌ 结束任务异常:', error);
+      
+      // 异常情况下，也需要刷新任务列表以确保状态同步
+      try {
+        await this.loadTasks();
+        console.info('[TaskView] 🔄 任务列表刷新完成（异常后）');
+      } catch (refreshError) {
+        console.error('[TaskView] ❌ 刷新任务列表失败（异常后）:', refreshError);
+      }
+      
+      // 异常情况下，避免执行可能导致UI上下文错误的操作
+      try {
+        promptAction.showToast({
+          message: '结束任务失败，请重试',
+          duration: 2000
+        });
+      } catch (uiError) {
+        console.error('[TaskView] ❌ 显示异常提示失败:', uiError);
+      }
+    }
+  }
+
+  async uploadTask(taskId: number) {
+    try {
+      console.info('[TaskView] 📤 开始上传任务数据，ID:', taskId);
+      
+      // 添加到上传中的任务集合
+      this.uploadingTasks.add(taskId);
+      this.currentUploadTaskId = taskId;
+      this.uploadProgress = 0;
+      this.showUploadProgress = true;
+      
+      // 模拟上传进度
+      const progressInterval = setInterval(() => {
+        if (this.uploadProgress < 90) {
+          this.uploadProgress += 10;
+        }
+      }, 200);
+      
+      const response = await TaskService.uploadTask(taskId);
+      
+      // 清除进度定时器
+      clearInterval(progressInterval);
+      this.uploadProgress = 100;
+      
+      interface ResponseWithCode {
+        code: number;
+        msg?: string;
+      }
+      const responseWithCode = response as ResponseWithCode;
+      
+      if (responseWithCode.code === 200) {
+        console.info('[TaskView] ✅ 任务数据上传成功');
+        
+        // 延迟关闭进度条，让用户看到100%
+        setTimeout(() => {
+          this.showUploadProgress = false;
+          this.uploadProgress = 0;
+          this.currentUploadTaskId = 0;
+        }, 1000);
+        
+        promptAction.showToast({
+          message: '任务数据上传成功',
           duration: 2000
         });
         
-        // 跳转到任务执行页面
-        router.pushUrl({
-          url: 'pages/TaskExecuteView',
-          params: {
-            taskId: taskId
-          }
+        // 刷新任务列表以获取最新状态
+        try {
+          await this.loadTasks();
+          console.info('[TaskView] 🔄 任务列表刷新完成');
+        } catch (refreshError) {
+          console.error('[TaskView] ❌ 刷新任务列表失败:', refreshError);
+        }
+        
+      } else {
+        console.error('[TaskView] ❌ 任务数据上传失败，错误码:', responseWithCode.code, '错误信息:', responseWithCode.msg);
+        this.showUploadProgress = false;
+        this.uploadProgress = 0;
+        this.currentUploadTaskId = 0;
+        
+        promptAction.showToast({
+          message: responseWithCode.msg || '上传任务数据失败',
+          duration: 2000
         });
       }
+      
     } catch (error) {
-      console.error('启动任务失败:', error);
+      console.error('[TaskView] ❌ 上传任务数据异常:', error);
+      this.showUploadProgress = false;
+      this.uploadProgress = 0;
+      this.currentUploadTaskId = 0;
+      
       promptAction.showToast({
-        message: '启动任务失败，请重试',
+        message: '上传任务数据失败，请重试',
         duration: 2000
       });
+    } finally {
+      // 从上传中的任务集合中移除
+      this.uploadingTasks.delete(taskId);
     }
   }
 
@@ -531,16 +742,27 @@ struct TaskView {
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
         
-        Button('⚙️')
-          .fontSize(16)
-          .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
-          .backgroundColor('transparent')
-          .onClick(() => {
-            promptAction.showToast({
-              message: '设置功能开发中',
-              duration: 2000
-            });
-          })
+        Row() {
+          Button('🔄')
+            .fontSize(16)
+            .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+            .backgroundColor('transparent')
+            .onClick(() => {
+              console.info('[TaskView] 🔄 手动刷新任务列表');
+              this.loadTasks();
+            })
+            .margin({ right: 10 })
+          
+          Button('⚙️')
+            .fontSize(16)
+            .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+            .backgroundColor('transparent')
+            .onClick(() => {
+              router.pushUrl({
+                url: 'pages/SettingsView'
+              });
+            })
+        }
       }
       .width('100%')
       .height(60)
@@ -836,18 +1058,37 @@ struct TaskView {
                       .border({ width: 1, color: '#f56c6c' })
                       .margin({ left: 5 })
                       .onClick(() => this.deleteTask(task.id))
-                  } else if (task.taskStatus === AppConstants.TASK_STATUS.UPLOADING) {
-                    Button('上传')
+                  } else if (task.taskStatus === AppConstants.TASK_STATUS.RUNNING) {
+                    Button('结束任务')
                       .fontSize(12)
                       .fontColor('#ffffff')
-                      .backgroundColor(AppConstants.COLORS.PRIMARY)
-                      .border({ width: 1, color: AppConstants.COLORS.PRIMARY })
-                      .onClick(() => {
-                        promptAction.showToast({
-                          message: '上传功能开发中',
-                          duration: 2000
-                        });
-                      })
+                      .backgroundColor('#f56c6c')
+                      .border({ width: 1, color: '#f56c6c' })
+                      .onClick(() => this.endTask(task.id))
+                    
+                    Button('查看')
+                      .fontSize(12)
+                      .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+                      .backgroundColor('#ffffff')
+                      .border({ width: 1, color: '#dddddd' })
+                      .margin({ left: 5 })
+                      .onClick(() => this.viewTaskDetail(task.id))
+                  } else if (task.taskStatus === AppConstants.TASK_STATUS.UPLOADING) {
+                    if (this.uploadingTasks.has(task.id)) {
+                      Button('上传中...')
+                        .fontSize(12)
+                        .fontColor('#ffffff')
+                        .backgroundColor('#909399')
+                        .border({ width: 1, color: '#909399' })
+                        .enabled(false)
+                    } else {
+                      Button('上传')
+                        .fontSize(12)
+                        .fontColor('#ffffff')
+                        .backgroundColor(AppConstants.COLORS.PRIMARY)
+                        .border({ width: 1, color: AppConstants.COLORS.PRIMARY })
+                        .onClick(() => this.uploadTask(task.id))
+                    }
                   } else {
                     Button('查看')
                       .fontSize(12)
@@ -1051,6 +1292,54 @@ struct TaskView {
          .height('100%')
          .backgroundColor('rgba(0,0,0,0.5)')
          .onClick(() => this.closeAddTask())
+      }
+      
+      // 上传进度弹窗
+      if (this.showUploadProgress) {
+        Stack() {
+          Column() {
+            Text('上传任务数据')
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .margin({ bottom: 20 })
+            
+            Text(`任务ID: ${this.currentUploadTaskId}`)
+              .fontSize(14)
+              .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+              .margin({ bottom: 15 })
+            
+            Progress({
+              value: this.uploadProgress,
+              total: 100,
+              type: ProgressType.Linear
+            })
+              .width('100%')
+              .height(8)
+              .color(AppConstants.COLORS.PRIMARY)
+              .margin({ bottom: 10 })
+            
+            Text(`${this.uploadProgress}%`)
+              .fontSize(14)
+              .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+              .textAlign(TextAlign.Center)
+            
+            if (this.uploadProgress === 100) {
+              Text('上传完成！')
+                .fontSize(14)
+                .fontColor(AppConstants.COLORS.SUCCESS)
+                .margin({ top: 10 })
+            }
+          }
+          .width(300)
+          .padding(30)
+          .backgroundColor('#ffffff')
+          .borderRadius(8)
+          .shadow({ radius: 12, color: 'rgba(0,0,0,0.2)', offsetX: 0, offsetY: 4 })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .alignContent(Alignment.Center)
       }
     }
     .width('100%')

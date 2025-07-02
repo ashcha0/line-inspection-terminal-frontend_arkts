@@ -183,7 +183,20 @@ export class TaskService {
     try {
       console.info(`[TaskService] 🚀 启动任务，ID: ${id}`);
       const response = await HttpUtil.post(`/agv/task/start/${id}`);
-      console.info('[TaskService] ✅ 任务启动成功');
+      
+      // 检查业务响应码
+      interface ResponseWithCode {
+        code: number;
+        msg?: string;
+      }
+      const responseWithCode = response as ResponseWithCode;
+      
+      if (responseWithCode.code === 200) {
+        console.info('[TaskService] ✅ 任务启动成功');
+      } else {
+        console.error(`[TaskService] ❌ 任务启动失败，错误码: ${responseWithCode.code}, 错误信息: ${responseWithCode.msg}`);
+      }
+      
       return response;
     } catch (error) {
       console.error(`[TaskService] ❌ 启动任务失败，ID: ${id}`, error);
