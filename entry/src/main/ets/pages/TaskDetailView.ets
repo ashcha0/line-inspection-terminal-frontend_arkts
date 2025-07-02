@@ -117,7 +117,9 @@ struct TaskDetailView {
       if (!this.selectedFlaw || this.isUpdatingFlaw) return;
       
       this.isUpdatingFlaw = true;
-      console.info('[TaskDetailView] 🔄 更新故障状态:', { flawId, status, remark: this.flawRemark });
+      console.info('[TaskDetailView] 🔄 更新故障状态 flawId:', flawId);
+        console.info('[TaskDetailView] 🔄 更新故障状态 status:', status);
+        console.info('[TaskDetailView] 🔄 更新故障状态 remark:', this.flawRemark);
       
       // 根据状态设置confirmed和remark
       let confirmed: boolean;

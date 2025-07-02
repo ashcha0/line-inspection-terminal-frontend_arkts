@@ -42,6 +42,16 @@ interface NewFlawAlert {
   flaw: LiveFlaw | null;
 }
 
+// 路由参数接口
+interface RouterParamsData {
+  taskId: number;
+}
+
+interface RouterParams {
+  url: string;
+  params: RouterParamsData;
+}
+
 // 使用AgvTask接口替代本地Task接口
 
 @Entry
@@ -371,38 +381,101 @@ struct TaskExecuteView {
 
   async finishTask() {
     try {
-      console.info('[TaskExecuteView] 🏁 完成任务');
+      console.info('[finishTask] 🏁 完成任务 - 开始执行');
+      console.info('[finishTask] 📊 当前状态 taskId:', this.taskId);
+      console.info('[finishTask] 📊 当前状态 isTaskRunning:', this.isTaskRunning);
+      console.info('[finishTask] 📊 当前状态 timestamp:', new Date().toISOString());
       
       // 先停止AGV确保安全
+      console.info('[finishTask] 🛑 正在停止AGV...');
       await AgvMovementService.agvStop();
-      console.info('[TaskExecuteView] ✅ AGV已停止');
+      console.info('[finishTask] ✅ AGV已停止');
       
-      const response = await HttpUtil.post(`/agv/task/end/${this.taskId}?isAbort=false`);
+      // 调用后端接口结束任务
+      console.info('[finishTask] 📡 正在调用后端接口结束任务...');
+      const endTaskUrl = `/agv/task/end/${this.taskId}?isAbort=false`;
+      console.info('[finishTask] 🔗 请求URL:', endTaskUrl);
+      
+      const response = await HttpUtil.post(endTaskUrl);
+      console.info('[finishTask] 📥 后端响应 code:', response.code);
+      console.info('[finishTask] 📥 后端响应 message:', response.msg);
+      console.info('[finishTask] 📥 后端响应 timestamp:', new Date().toISOString());
+      
       if (response.code === 200) {
-        promptAction.showToast({
-          message: '任务已完成',
-          duration: 2000
-        });
+        console.info('[finishTask] ✅ 后端任务结束成功');
         
+        // 显示成功提示
+        try {
+          promptAction.showToast({
+            message: '任务已完成',
+            duration: 2000
+          });
+          console.info('[finishTask] ✅ 成功提示已显示');
+        } catch (toastError) {
+          console.warn('[finishTask] ⚠️ 显示提示失败:', toastError);
+        }
+        
+        // 停止轮询和更新状态
+        console.info('[finishTask] 🔄 正在停止轮询和更新状态...');
         this.stopPolling();
         this.isTaskRunning = false;
+        console.info('[finishTask] ✅ 轮询已停止，状态已更新');
         
-        console.info('[TaskExecuteView] ✅ 任务完成成功');
-        
-        // 跳转到任务详情页面
-        router.replaceUrl({
-          url: 'pages/TaskDetailView',
+        // 准备页面跳转参数
+        const routerParams: RouterParams = {
+          url: 'pages/TaskReviewView',
           params: {
             taskId: this.taskId
           }
-        });
+        };
+        console.info('[finishTask] 🔄 准备页面跳转 url:', routerParams.url);
+        console.info('[finishTask] 🔄 准备页面跳转 taskId:', routerParams.params.taskId);
+        
+        // 延迟执行页面跳转，确保UI上下文稳定
+        setTimeout(() => {
+          try {
+            console.info('[finishTask] 🚀 开始执行页面跳转...');
+            router.replaceUrl(routerParams).then(() => {
+              console.info('[finishTask] ✅ 页面跳转成功');
+            }).catch((routerError: Error) => {
+              console.error('[finishTask] ❌ 页面跳转失败:', String(routerError));
+              console.error('[finishTask] 🔍 跳转参数 url:', routerParams.url);
+              console.error('[finishTask] 🔍 跳转参数 taskId:', routerParams.params.taskId);
+              
+              // 跳转失败时的备用方案
+              try {
+                promptAction.showToast({
+                  message: '页面跳转失败，请手动返回任务列表',
+                  duration: 3000
+                });
+              } catch (backupToastError) {
+                console.error('[finishTask] ❌ 备用提示也失败:', backupToastError);
+              }
+            });
+          } catch (routerSyncError) {
+            console.error('[finishTask] ❌ 同步路由调用失败:', routerSyncError);
+          }
+        }, 500); // 延迟500ms执行跳转
+        
+        console.info('[finishTask] ✅ 任务完成流程执行完毕');
+      } else {
+        console.error('[finishTask] ❌ 后端返回错误 code:', response.code);
+        console.error('[finishTask] ❌ 后端返回错误 message:', response.msg);
+        throw new Error(`后端返回错误: ${response.msg}`);
       }
     } catch (error) {
-      console.error('[TaskExecuteView] ❌ 完成任务失败:', error);
-      promptAction.showToast({
-        message: '完成任务失败，请重试',
-        duration: 2000
-      });
+      console.error('[finishTask] ❌ 完成任务失败:', error);
+      console.error('[finishTask] 🔍 任务ID:', this.taskId);
+      console.error('[finishTask] 🔍 错误时间:', new Date().toISOString());
+      
+      try {
+        promptAction.showToast({
+          message: '完成任务失败，请重试',
+          duration: 2000
+        });
+      } catch (toastError) {
+        console.error('[finishTask] ❌ 错误提示显示失败:', toastError);
+      }
     }
   }
 
@@ -444,10 +517,8 @@ struct TaskExecuteView {
       this.cameraConnectionStatus = isConnected ? '连接正常' : '连接异常';
       this.lastCameraCheck = new Date().toLocaleTimeString();
       
-      console.info('[TaskExecuteView] 📊 摄像头连接检查结果:', {
-        isConnected: isConnected,
-        checkTime: this.lastCameraCheck
-      });
+      console.info('[TaskExecuteView] 📊 摄像头连接检查结果 isConnected:', isConnected);
+      console.info('[TaskExecuteView] 📊 摄像头连接检查结果 checkTime:', this.lastCameraCheck);
     } catch (error) {
       console.error('[TaskExecuteView] ❌ 摄像头连接检查失败:', error);
       this.cameraConnectionStatus = '检查失败';

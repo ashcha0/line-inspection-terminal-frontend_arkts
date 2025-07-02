@@ -23,6 +23,7 @@ export interface AgvFlaw {
   level?: string;
   countNum?: number;
   deleteFlag?: boolean;
+  status?: string; // 故障状态：pending, confirmed等
 }
 
 // 分页参数接口
@@ -179,14 +180,51 @@ export class FlawService {
    */
   static async liveInfo(taskId: number): Promise<AgvFlaw[]> {
     try {
-      console.info(`[FlawService] 🔄 轮询获取实时故障信息，任务ID: ${taskId}`);
-      const response = await HttpUtil.get(`/agv/flaw/live/${taskId}`);
+      const requestUrl = `/agv/flaw/live/${taskId}`;
+      console.info(`[FlawService] 🔄 轮询获取实时故障信息`);
+      console.info(`[FlawService] 📊 请求参数: taskId=${taskId}`);
+      console.info(`[FlawService] 📊 请求URL: ${requestUrl}`);
+      
+      const response = await HttpUtil.get(requestUrl);
+      
+      console.info(`[FlawService] 📊 响应状态码: ${response.code}`);
+      console.info(`[FlawService] 📊 响应消息: ${response.msg}`);
+      console.info(`[FlawService] 📊 响应数据类型: ${typeof response.data}`);
+      console.info(`[FlawService] 📊 响应数据内容: ${JSON.stringify(response.data)}`);
+      
+      if (response.code !== 200) {
+        console.warn(`[FlawService] ⚠️ 服务器返回非200状态码: ${response.code}, 消息: ${response.msg}`);
+        return [];
+      }
+      
       const responseData = response.data as AgvFlaw[];
-      console.info('[FlawService] ✅ 实时故障信息获取成功，数量:', responseData?.length || 0);
-      return responseData || [];
+      
+      if (!Array.isArray(responseData)) {
+        console.warn(`[FlawService] ⚠️ 响应数据不是数组类型: ${typeof responseData}`);
+        return [];
+      }
+      
+      console.info(`[FlawService] ✅ 实时故障信息获取成功，数量: ${responseData.length}`);
+      
+      if (responseData.length > 0) {
+         console.info(`[FlawService] 📊 故障详情:`);
+         responseData.forEach((flaw, index) => {
+           const status = flaw.confirmed ? 'confirmed' : 'pending';
+           console.info(`[FlawService] 📊 故障${index + 1}: ID=${flaw.id}, 名称=${flaw.flawName}, 类型=${flaw.flawType}, 状态=${status}`);
+         });
+       } else {
+         console.info(`[FlawService] 📊 当前任务无故障数据`);
+       }
+      
+      return responseData;
     } catch (error) {
-      console.error(`[FlawService] ❌ 获取实时故障信息失败，任务ID: ${taskId}`, error);
-      throw new Error(`获取实时故障信息失败，任务ID: ${taskId}`);
+      console.error(`[FlawService] ❌ 获取实时故障信息失败，任务ID: ${taskId}`);
+      console.error(`[FlawService] 📊 错误类型: ${typeof error}`);
+      console.error(`[FlawService] 📊 错误内容: ${JSON.stringify(error)}`);
+      console.error(`[FlawService] 📊 错误堆栈: ${error instanceof Error ? error.stack : '无堆栈信息'}`);
+      
+      // 返回空数组而不是抛出异常，避免中断轮询
+      return [];
     }
   }
   
@@ -210,11 +248,11 @@ export class FlawService {
   /**
    * 确认故障
    * @param id 故障ID
-   * @param confirmed 是否确认
+   * @param confirmed 是否确认 (可选，默认为true)
    * @param remark 备注信息
    * @returns 确认结果
    */
-  static async confirmFlaw(id: number, confirmed: boolean, remark?: string): Promise<ApiResponse<object>> {
+  static async confirmFlaw(id: number, confirmed: boolean = true, remark?: string): Promise<ApiResponse<object>> {
     try {
       console.info(`[FlawService] ✅ 确认故障，ID: ${id}, 确认: ${confirmed}`);
       const data: Partial<AgvFlaw> = {
