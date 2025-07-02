@@ -77,6 +77,7 @@ struct InitView {
 
   // 开始系统检查
   async startSystemCheck() {
+    console.info('[InitView] 开始系统自检流程');
     this.isChecking = true;
     this.allChecksPassed = false;
     
@@ -97,12 +98,14 @@ struct InitView {
 
     // 依次执行检查
     for (let i = 0; i < this.checkItems.length; i++) {
+      console.info(`[InitView] 开始检查项目: ${this.checkItems[i].id}`);
       await this.checkSingleItem(this.checkItems[i].id, i);
       await this.delay(500); // 模拟检查间隔
     }
 
     this.isChecking = false;
     this.checkAllPassed();
+    console.info('[InitView] 系统自检流程完成');
   }
 
   // 检查单个项目
@@ -110,7 +113,9 @@ struct InitView {
     try {
       const result = await this.performCheck(itemId);
       
-      const currentItem = this.checkItems[index];
+      // 创建新的数组来触发@State更新
+      const newCheckItems: CheckItem[] = [...this.checkItems];
+      const currentItem = newCheckItems[index];
       const updatedItem: CheckItem = {
         id: currentItem.id,
         name: currentItem.name,
@@ -118,14 +123,24 @@ struct InitView {
         errorMsg: result.errorMsg,
         solution: currentItem.solution
       };
-      this.checkItems[index] = updatedItem;
+      newCheckItems[index] = updatedItem;
+      this.checkItems = newCheckItems;
+      
+      // 强制触发UI更新
+      setTimeout(() => {
+        this.checkItems = [...this.checkItems];
+      }, 10);
+      
+      console.info(`[InitView] 检查项目 ${itemId} 完成，状态: ${updatedItem.status}`);
       
       // 如果检查失败，自动展开该项
       if (!result.success) {
         this.expandedItems.add(itemId);
       }
     } catch (error) {
-      const currentItem = this.checkItems[index];
+      // 创建新的数组来触发@State更新
+      const newCheckItems: CheckItem[] = [...this.checkItems];
+      const currentItem = newCheckItems[index];
       const updatedItem: CheckItem = {
         id: currentItem.id,
         name: currentItem.name,
@@ -133,7 +148,15 @@ struct InitView {
         errorMsg: '检查过程中发生错误',
         solution: currentItem.solution
       };
-      this.checkItems[index] = updatedItem;
+      newCheckItems[index] = updatedItem;
+      this.checkItems = newCheckItems;
+      
+      // 强制触发UI更新
+      setTimeout(() => {
+        this.checkItems = [...this.checkItems];
+      }, 10);
+      
+      console.error(`[InitView] 检查项目 ${itemId} 异常:`, error);
       this.expandedItems.add(itemId);
     }
   }
@@ -330,7 +353,7 @@ struct InitView {
             .width('100%')
             .border({ width: 1, color: '#dddddd', radius: 4 })
             .margin({ bottom: 10 })
-          }, (item: CheckItem) => item.id.toString())
+          }, (item: CheckItem) => `${item.id}_${item.status}`)
         }
         .width('100%')
         .margin({ bottom: 40 })
@@ -358,6 +381,8 @@ struct InitView {
             .border({ width: 1, color: '#ff6b6b' })
             .enabled(!this.allChecksPassed)
             .onClick(() => this.skipSystemCheck())
+
+
 
           // 进入系统按钮
           Button('进入系统')

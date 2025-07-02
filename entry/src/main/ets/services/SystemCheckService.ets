@@ -25,13 +25,16 @@ export class SystemCheckService {
    */
   static async checkFileSystem(): Promise<CheckResult> {
     try {
+      console.info('[SystemCheckService] 开始检查文件系统');
       const response = await HttpUtil.get(AppConstants.API.SYSTEM_CHECK_FS);
+      console.info('[SystemCheckService] 文件系统检查响应:', JSON.stringify(response));
       return {
         success: response.code === 200,
         message: response.msg,
         errorCode: response.code
       };
     } catch (error) {
+      console.error('[SystemCheckService] 文件系统检查异常:', error);
       return {
         success: false,
         message: '文件系统检查失败',
@@ -45,13 +48,16 @@ export class SystemCheckService {
    */
   static async checkDatabase(): Promise<CheckResult> {
     try {
+      console.info('[SystemCheckService] 开始检查数据库连接');
       const response = await HttpUtil.get(AppConstants.API.SYSTEM_CHECK_DB);
+      console.info('[SystemCheckService] 数据库检查响应:', JSON.stringify(response));
       return {
         success: response.code === 200,
         message: response.msg,
         errorCode: response.code
       };
     } catch (error) {
+      console.error('[SystemCheckService] 数据库检查异常:', error);
       return {
         success: false,
         message: '数据库连接检查失败',
@@ -65,13 +71,16 @@ export class SystemCheckService {
    */
   static async checkAgv(): Promise<CheckResult> {
     try {
+      console.info('[SystemCheckService] 开始检查AGV连接');
       const response = await HttpUtil.get(AppConstants.API.SYSTEM_CHECK_AGV);
+      console.info('[SystemCheckService] AGV检查响应:', JSON.stringify(response));
       return {
         success: response.code === 200,
         message: response.msg,
         errorCode: response.code
       };
     } catch (error) {
+      console.error('[SystemCheckService] AGV检查异常:', error);
       return {
         success: false,
         message: 'AGV连接检查失败',
@@ -85,13 +94,16 @@ export class SystemCheckService {
    */
   static async checkCamera(): Promise<CheckResult> {
     try {
+      console.info('[SystemCheckService] 开始检查摄像头连接');
       const response = await HttpUtil.get(AppConstants.API.SYSTEM_CHECK_CAM);
+      console.info('[SystemCheckService] 摄像头检查响应:', JSON.stringify(response));
       return {
         success: response.code === 200,
         message: response.msg,
         errorCode: response.code
       };
     } catch (error) {
+      console.error('[SystemCheckService] 摄像头检查异常:', error);
       return {
         success: false,
         message: '摄像头连接检查失败',

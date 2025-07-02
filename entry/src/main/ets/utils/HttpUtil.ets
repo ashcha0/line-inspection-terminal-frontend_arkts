@@ -32,6 +32,7 @@ export class HttpUtil {
     
     try {
       const fullUrl = url.startsWith('http') ? url : `${HttpUtil.BASE_URL}${url}`;
+      console.info(`[HttpUtil] 发起请求: ${fullUrl}`);
       
       const requestOptions: http.HttpRequestOptions = {
         method: config.method || http.RequestMethod.GET,
@@ -42,6 +43,8 @@ export class HttpUtil {
         readTimeout: config.timeout || HttpUtil.TIMEOUT,
         extraData: config.data ? JSON.stringify(config.data) : undefined
       };
+      
+      console.info(`[HttpUtil] 请求配置:`, JSON.stringify(requestOptions));
       
       // 合并自定义headers
       if (config.headers) {
@@ -64,11 +67,15 @@ export class HttpUtil {
       }
 
       const response = await httpRequest.request(fullUrl, requestOptions);
+      console.info(`[HttpUtil] 响应状态码: ${response.responseCode}`);
+      console.info(`[HttpUtil] 响应内容: ${response.result}`);
       
       if (response.responseCode === 200) {
         const result = JSON.parse(response.result as string) as HttpResponse<T>;
+        console.info(`[HttpUtil] 解析后的响应:`, JSON.stringify(result));
         return result;
       } else {
+        console.warn(`[HttpUtil] HTTP错误: ${response.responseCode}`);
         return {
           code: response.responseCode,
           msg: `HTTP ${response.responseCode}`,
@@ -76,7 +83,7 @@ export class HttpUtil {
         };
       }
     } catch (error) {
-      console.error('HTTP请求失败:', error);
+      console.error('[HttpUtil] HTTP请求失败:', error);
       return {
         code: -1,
         msg: '网络请求失败',
