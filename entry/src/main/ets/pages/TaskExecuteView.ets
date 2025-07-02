@@ -309,13 +309,58 @@ struct TaskExecuteView {
   async updateLiveFlaws() {
     try {
       console.info('[TaskExecuteView] 🔄 更新实时故障数据');
+      console.info(`[TaskExecuteView] 📊 请求参数 - taskId: ${this.taskId}`);
+      console.info(`[TaskExecuteView] 📊 当前故障计数: ${this.lastFlawCount}`);
       
-      // 使用FlawService获取实时故障信息
-      const newFlaws = await FlawService.liveInfo(this.taskId);
+      // 测试：同时使用两个接口获取故障数据进行对比
+      console.info(`[TaskExecuteView] 📊 测试 - 使用实时接口: /agv/flaw/live/${this.taskId}`);
+      const liveFlaws = await FlawService.liveInfo(this.taskId);
+      console.info(`[TaskExecuteView] 📊 实时接口返回数据: ${JSON.stringify(liveFlaws)}`);
+      
+      console.info(`[TaskExecuteView] 📊 测试 - 使用列表接口: /agv/flaw/list?taskId=${this.taskId}`);
+      const listResponse = await HttpUtil.get(`/agv/flaw/list?taskId=${this.taskId}`);
+      console.info(`[TaskExecuteView] 📊 列表接口响应: ${JSON.stringify(listResponse)}`);
+      
+      // 定义响应数据类型
+      interface TableDataInfo {
+        total?: number;
+        rows?: LiveFlaw[];
+      }
+      
+      let newFlaws: LiveFlaw[] = [];
+      if (listResponse.code === 200 && listResponse.data) {
+        const responseData = listResponse.data as TableDataInfo;
+        if (responseData && Array.isArray(responseData.rows)) {
+          newFlaws = responseData.rows;
+          console.info(`[TaskExecuteView] 📊 使用列表接口数据，故障数量: ${newFlaws.length}`);
+        } else {
+          newFlaws = liveFlaws;
+          console.info(`[TaskExecuteView] 📊 列表接口数据格式异常，使用实时接口数据，故障数量: ${newFlaws.length}`);
+        }
+      } else {
+        newFlaws = liveFlaws;
+        console.info(`[TaskExecuteView] 📊 列表接口调用失败，使用实时接口数据，故障数量: ${newFlaws.length}`);
+      }
+      
+      // 详细记录响应数据
+      console.info(`[TaskExecuteView] 📊 响应数据类型: ${typeof newFlaws}`);
+      console.info(`[TaskExecuteView] 📊 响应数据长度: ${Array.isArray(newFlaws) ? newFlaws.length : 'N/A'}`);
+      console.info(`[TaskExecuteView] 📊 响应数据内容: ${JSON.stringify(newFlaws)}`);
+      
+      if (Array.isArray(newFlaws) && newFlaws.length > 0) {
+        console.info(`[TaskExecuteView] 📊 故障详情列表:`);
+        newFlaws.forEach((flaw, index) => {
+          console.info(`[TaskExecuteView] 📊 故障${index + 1}: ID=${flaw.id}, 名称=${flaw.flawName}, 类型=${flaw.flawType}, 确认状态=${flaw.confirmed ? '已确认' : '待确认'}`);
+        });
+      } else {
+        console.info(`[TaskExecuteView] 📊 当前任务无故障数据或响应格式异常`);
+      }
       
       // 检查是否有新故障
       if (newFlaws.length > this.lastFlawCount) {
         const newFlawsAdded = newFlaws.slice(this.lastFlawCount);
+        
+        console.info(`[TaskExecuteView] 🚨 检测到新故障: 之前${this.lastFlawCount}个，现在${newFlaws.length}个，新增${newFlawsAdded.length}个`);
         
         // 显示新故障提示
         setTimeout(() => {
@@ -332,18 +377,22 @@ struct TaskExecuteView {
         // 如果有新故障，显示弹窗提醒第一个新故障
         if (newFlawsAdded.length > 0) {
           this.showNewFlawAlert(newFlawsAdded[0]);
+          console.info(`[TaskExecuteView] 🔔 显示新故障弹窗: ${newFlawsAdded[0].flawName}`);
         }
         
-        console.info(`[TaskExecuteView] 🚨 发现${newFlawsAdded.length}个新故障:`, 
-          newFlawsAdded.map(f => f.flawName).join(', '));
+        console.info(`[TaskExecuteView] 🚨 新增故障列表: ${newFlawsAdded.map(f => f.flawName).join(', ')}`);
+      } else {
+        console.info(`[TaskExecuteView] 📊 故障数量无变化: ${newFlaws.length}`);
       }
       
       this.liveFlaws = newFlaws;
       this.lastFlawCount = newFlaws.length;
       
-      console.info(`[TaskExecuteView] ✅ 实时故障数据更新成功，当前故障数: ${newFlaws.length}`);
+      console.info(`[TaskExecuteView] ✅ 实时故障数据更新完成 - 当前故障数: ${newFlaws.length}, 上次计数: ${this.lastFlawCount}`);
     } catch (error) {
       console.error('[TaskExecuteView] ❌ 更新实时故障失败:', error);
+      console.error(`[TaskExecuteView] 📊 错误详情 - taskId: ${this.taskId}, 错误类型: ${typeof error}`);
+      console.error(`[TaskExecuteView] 📊 错误内容: ${JSON.stringify(error)}`);
     }
   }
 
