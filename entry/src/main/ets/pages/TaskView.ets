@@ -27,7 +27,7 @@ struct TaskView {
   @State searchTaskStatus: string = '';
   @State selectedStatusIndex: number = 0; // 状态选择器的选中索引
   
-  // 新增任务表单状态
+  // 新增/编辑任务表单状态
   @State taskName: string = '';
   @State taskCode: string = '';
   @State startPos: string = '';
@@ -35,6 +35,10 @@ struct TaskView {
   @State creator: string = '';
   @State executor: string = '';
   @State remark: string = '';
+  
+  // 编辑任务相关状态
+  @State isEditMode: boolean = false;
+  @State editingTaskId: number = 0;
 
   aboutToAppear() {
     this.loadTasks();
@@ -99,12 +103,45 @@ struct TaskView {
   }
 
   openAddTask() {
+    this.isEditMode = false;
+    this.editingTaskId = 0;
     this.clearTaskForm();
     this.showAddTask = true;
   }
 
+  openEditTask(task: AgvTask) {
+    console.info('[TaskView] ✏️ 打开编辑任务，任务ID:', task.id);
+    console.info('[TaskView] 📋 任务详细数据:', JSON.stringify(task));
+    
+    this.isEditMode = true;
+    this.editingTaskId = task.id;
+    
+    // 填充表单数据
+    this.taskName = task.taskName || '';
+    this.taskCode = task.taskCode || '';
+    this.startPos = task.startPos || '';
+    this.taskTrip = task.taskTrip || '';
+    this.creator = task.creator || '';
+    this.executor = task.executor || '';
+    this.remark = task.remark || '';
+    
+    console.info('[TaskView] 📝 表单数据填充完成:');
+    console.info('[TaskView] - 任务名称:', this.taskName);
+    console.info('[TaskView] - 任务编号:', this.taskCode);
+    console.info('[TaskView] - 起始位置:', this.startPos);
+    console.info('[TaskView] - 巡视路线:', this.taskTrip);
+    console.info('[TaskView] - 创建人:', this.creator);
+    console.info('[TaskView] - 执行人:', this.executor);
+    console.info('[TaskView] - 备注:', this.remark);
+    
+    this.showAddTask = true;
+    console.info('[TaskView] ✅ 编辑模态框已打开');
+  }
+
   closeAddTask() {
     this.showAddTask = false;
+    this.isEditMode = false;
+    this.editingTaskId = 0;
     this.clearTaskForm();
   }
 
@@ -119,6 +156,14 @@ struct TaskView {
   }
 
   async addTask() {
+    if (this.isEditMode) {
+      await this.updateTask();
+    } else {
+      await this.createTask();
+    }
+  }
+
+  async createTask() {
     // 表单验证
     if (!this.taskName || !this.startPos || !this.taskTrip || !this.creator || !this.executor) {
       promptAction.showToast({
@@ -213,29 +258,189 @@ struct TaskView {
     }
   }
 
-  async deleteTask(taskId: number) {
+  async updateTask() {
+    // 表单验证
+    if (!this.taskName || !this.startPos || !this.taskTrip || !this.creator || !this.executor) {
+      promptAction.showToast({
+        message: '请填写所有必填字段',
+        duration: 2000
+      });
+      return;
+    }
+
     try {
-      const response = await TaskService.delTask(taskId);
+      // 先获取原有任务数据，保留完整的数据结构
+      const originalTask = await TaskService.getTask(this.editingTaskId);
+      console.info('[TaskView] 📋 获取原有任务数据:', JSON.stringify(originalTask));
       
-      interface ResponseWithCode {
-        code: number;
-      }
-      const responseWithCode = response as ResponseWithCode;
-      if (responseWithCode.code === 200) {
+      // 只更新用户修改的字段，保留其他原有数据
+      const taskData: AgvTask = {
+        id: originalTask.id,
+        taskName: this.taskName,
+        taskCode: this.taskCode,
+        startPos: this.startPos,
+        taskTrip: this.taskTrip,
+        creator: this.creator,
+        executor: this.executor,
+        remark: this.remark || '',
+        taskStatus: originalTask.taskStatus,
+        round: originalTask.round,
+        uploaded: originalTask.uploaded,
+        execTime: originalTask.execTime,
+        endTime: originalTask.endTime,
+        createTime: originalTask.createTime,
+        cloudTaskId: originalTask.cloudTaskId
+      };
+      
+      console.info('[TaskView] ✏️ 开始更新任务:', JSON.stringify(taskData));
+      const response = await TaskService.updateTask(taskData);
+      
+      console.info('[TaskView] 📋 任务更新响应:', JSON.stringify(response));
+      
+      // 检查响应状态
+       interface ResponseWithCode {
+         code: number;
+         msg?: string;
+         data?: Object;
+       }
+      
+      const responseData = response as ResponseWithCode;
+      
+      if (responseData.code === 200) {
+        console.info('[TaskView] ✅ 任务更新成功，准备更新UI');
+        
+        // 直接在当前上下文中执行UI操作
+        try {
+          console.info('[TaskView] 🔄 开始执行UI更新操作');
+          
+          // 先关闭模态框
+          this.closeAddTask();
+          console.info('[TaskView] 🔄 模态框已关闭');
+          
+          // 刷新任务列表
+          this.loadTasks();
+          console.info('[TaskView] 🔄 任务列表刷新完成');
+          
+          // 显示成功提示
+          promptAction.showToast({
+            message: '任务更新成功',
+            duration: 2000
+          });
+          
+          console.info('[TaskView] ✅ UI更新完成');
+        } catch (uiError) {
+          console.error('[TaskView] ❌ UI更新失败:', uiError);
+          // 如果UI更新失败，至少尝试关闭弹窗
+          try {
+            this.closeAddTask();
+          } catch (closeError) {
+            console.error('[TaskView] ❌ 关闭弹窗失败:', closeError);
+          }
+        }
+      } else {
+        console.error('[TaskView] ❌ 任务更新失败，错误码:', responseData.code, '错误信息:', responseData.msg);
         promptAction.showToast({
-          message: '任务删除成功',
+          message: responseData.msg || '更新任务失败',
           duration: 2000
         });
-        
-        this.loadTasks();
       }
+      
     } catch (error) {
-      console.error('删除任务失败:', error);
+      console.error('[TaskView] ❌ 更新任务异常:', error);
       promptAction.showToast({
-        message: '删除任务失败，请重试',
+        message: '更新任务失败，请重试',
         duration: 2000
       });
     }
+  }
+
+  deleteTask(taskId: number) {
+    console.info('[TaskView] 🗑️ 开始删除任务，ID:', taskId);
+    console.info('[TaskView] 🔍 当前UI上下文状态检查 - 开始删除前');
+    
+    // 先显示加载状态
+    this.loading = true;
+    console.info('[TaskView] ⏳ 设置加载状态为true');
+    
+    // 使用Promise链式调用，避免async/await导致的上下文丢失
+    TaskService.delTask(taskId)
+      .then((response) => {
+        console.info('[TaskView] 📋 删除任务响应:', JSON.stringify(response));
+        console.info('[TaskView] 🔍 Promise then回调中的UI上下文检查');
+        
+        interface ResponseWithCode {
+          code: number;
+          msg?: string;
+        }
+        const responseWithCode = response as ResponseWithCode;
+        
+        if (responseWithCode.code === 200) {
+          console.info('[TaskView] ✅ 任务删除成功，开始UI更新');
+          console.info('[TaskView] 🔍 准备更新UI状态 - loading设为false前');
+          
+          // 在主线程中直接更新UI状态
+          try {
+            this.loading = false;
+            console.info('[TaskView] ✅ 成功设置loading状态为false');
+          } catch (error) {
+            console.error('[TaskView] ❌ 设置loading状态失败:', error);
+          }
+          
+          // 显示成功提示
+          try {
+            promptAction.showToast({
+              message: '任务删除成功',
+              duration: 2000
+            });
+            console.info('[TaskView] ✅ 成功显示删除成功提示');
+          } catch (error) {
+            console.error('[TaskView] ❌ 显示提示失败:', error);
+          }
+          
+          // 延迟刷新任务列表，确保在正确的UI上下文中执行
+          console.info('[TaskView] ⏰ 准备延迟刷新任务列表');
+          setTimeout(() => {
+            console.info('[TaskView] 🔄 开始执行延迟刷新任务列表');
+            console.info('[TaskView] 🔍 setTimeout回调中的UI上下文检查');
+            try {
+              console.info('[TaskView] 📝 调用loadTasks前的状态检查');
+              this.loadTasks();
+              console.info('[TaskView] 🔄 任务列表刷新完成');
+            } catch (error) {
+              console.error('[TaskView] ❌ 刷新任务列表失败:', error);
+              console.error('[TaskView] 🔍 错误详情:', JSON.stringify(error));
+              // 备用方案：重置搜索参数并重新加载
+               try {
+                 console.info('[TaskView] 🔄 尝试备用刷新方案');
+                 // 重置搜索参数
+                 this.searchParams = {};
+                 this.loadTasks();
+               } catch (backupError) {
+                 console.error('[TaskView] ❌ 备用刷新方案也失败:', backupError);
+               }
+            }
+          }, 200); // 增加延迟时间到200ms
+          
+        } else {
+          console.error('[TaskView] ❌ 任务删除失败，错误码:', responseWithCode.code);
+          this.loading = false;
+          
+          promptAction.showToast({
+            message: responseWithCode.msg || '删除任务失败',
+            duration: 2000
+          });
+        }
+      })
+      .catch((error: Error) => {
+        console.error('[TaskView] ❌ 删除任务异常:', error);
+        console.error('[TaskView] 🔍 catch回调中的错误详情:', JSON.stringify(error));
+        this.loading = false;
+        
+        promptAction.showToast({
+          message: '删除任务失败，请重试',
+          duration: 2000
+        });
+      });
   }
 
   async startTask(taskId: number) {
@@ -616,6 +821,14 @@ struct TaskView {
                       .border({ width: 1, color: AppConstants.COLORS.SUCCESS })
                       .onClick(() => this.startTask(task.id))
                     
+                    Button('编辑')
+                      .fontSize(12)
+                      .fontColor('#ffffff')
+                      .backgroundColor(AppConstants.COLORS.PRIMARY)
+                      .border({ width: 1, color: AppConstants.COLORS.PRIMARY })
+                      .margin({ left: 5 })
+                      .onClick(() => this.openEditTask(task))
+                    
                     Button('删除')
                       .fontSize(12)
                       .fontColor('#ffffff')
@@ -644,7 +857,7 @@ struct TaskView {
                       .onClick(() => this.viewTaskDetail(task.id))
                   }
                 }
-                .width(150)
+                .width(200)
                 .justifyContent(FlexAlign.Center)
               }
               .width('100%')
@@ -668,7 +881,7 @@ struct TaskView {
           Column() {
             // 模态框标题
             Row() {
-              Text('新增任务')
+              Text(this.isEditMode ? '编辑任务' : '新增任务')
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .layoutWeight(1)
@@ -692,7 +905,7 @@ struct TaskView {
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入任务名称' })
+                    TextInput({ placeholder: '请输入任务名称', text: this.taskName })
                       .fontSize(14)
                       .onChange((value: string) => {
                         this.taskName = value;
@@ -707,7 +920,7 @@ struct TaskView {
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '留空自动生成' })
+                    TextInput({ placeholder: '留空自动生成', text: this.taskCode })
                       .fontSize(14)
                       .onChange((value: string) => {
                         this.taskCode = value;
@@ -725,7 +938,7 @@ struct TaskView {
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入起始地点' })
+                    TextInput({ placeholder: '请输入起始地点', text: this.startPos })
                       .fontSize(14)
                       .onChange((value: string) => {
                         this.startPos = value;
@@ -740,7 +953,7 @@ struct TaskView {
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入距离（公里）' })
+                    TextInput({ placeholder: '请输入距离（公里）', text: this.taskTrip })
                       .fontSize(14)
                       .onChange((value: string) => {
                         this.taskTrip = value;
@@ -758,7 +971,7 @@ struct TaskView {
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入创建人' })
+                    TextInput({ placeholder: '请输入创建人', text: this.creator })
                       .fontSize(14)
                       .onChange((value: string) => {
                         this.creator = value;
@@ -773,7 +986,7 @@ struct TaskView {
                       .fontSize(14)
                       .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                       .margin({ bottom: 5 })
-                    TextInput({ placeholder: '请输入执行人' })
+                    TextInput({ placeholder: '请输入执行人', text: this.executor })
                       .fontSize(14)
                       .onChange((value: string) => {
                         this.executor = value;
@@ -792,7 +1005,7 @@ struct TaskView {
                     .fontSize(14)
                     .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                     .margin({ bottom: 5 })
-                  TextArea({ placeholder: '请输入备注信息' })
+                  TextArea({ placeholder: '请输入备注信息', text: this.remark })
                     .fontSize(14)
                     .height(80)
                     .onChange((value: string) => {
@@ -816,7 +1029,7 @@ struct TaskView {
                 .border({ width: 1, color: '#dddddd' })
                 .onClick(() => this.closeAddTask())
 
-              Button('保存')
+              Button(this.isEditMode ? '保存' : '新增')
                 .fontSize(14)
                 .fontColor('#ffffff')
                 .backgroundColor(AppConstants.COLORS.PRIMARY)
