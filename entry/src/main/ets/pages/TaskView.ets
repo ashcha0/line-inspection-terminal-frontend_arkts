@@ -531,6 +531,24 @@ struct TaskView {
     }
   }
 
+  goToTaskExecute(taskId: number) {
+    try {
+      console.info('[TaskView] 🚀 跳转到任务执行页面，任务ID:', taskId);
+      router.pushUrl({
+        url: 'pages/TaskExecuteView',
+        params: {
+          taskId: taskId
+        }
+      });
+    } catch (error) {
+      console.error('[TaskView] ❌ 跳转到任务执行页面失败:', error);
+      promptAction.showToast({
+        message: '跳转失败，请重试',
+        duration: 2000
+      });
+    }
+  }
+
   async endTask(taskId: number) {
     try {
       console.info('[TaskView] 🛑 开始结束任务，ID:', taskId);
@@ -1059,11 +1077,19 @@ struct TaskView {
                       .margin({ left: 5 })
                       .onClick(() => this.deleteTask(task.id))
                   } else if (task.taskStatus === AppConstants.TASK_STATUS.RUNNING) {
-                    Button('结束任务')
+                    Button('巡视')
+                      .fontSize(12)
+                      .fontColor('#ffffff')
+                      .backgroundColor(AppConstants.COLORS.PRIMARY)
+                      .border({ width: 1, color: AppConstants.COLORS.PRIMARY })
+                      .onClick(() => this.goToTaskExecute(task.id))
+                    
+                    Button('结束')
                       .fontSize(12)
                       .fontColor('#ffffff')
                       .backgroundColor('#f56c6c')
                       .border({ width: 1, color: '#f56c6c' })
+                      .margin({ left: 5 })
                       .onClick(() => this.endTask(task.id))
                     
                     Button('查看')
