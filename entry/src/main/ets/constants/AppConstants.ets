@@ -12,6 +12,7 @@ interface Routes {
   TASK_DETAIL: string;
   TASK_EXECUTE: string;
   SETTINGS: string;
+  TASK_REVIEW: string;
 }
 
 interface TaskStatus {
@@ -89,7 +90,8 @@ export class AppConstants {
     TASK_LIST: 'pages/TaskView',
     TASK_DETAIL: 'pages/TaskDetailView',
     TASK_EXECUTE: 'pages/TaskExecuteView',
-    SETTINGS: 'pages/SettingsView'
+    SETTINGS: 'pages/SettingsView',
+    TASK_REVIEW: 'pages/TaskReviewView'
   };
   
   // 任务状态

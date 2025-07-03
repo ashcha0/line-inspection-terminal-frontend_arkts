@@ -543,18 +543,18 @@ struct TaskReviewView {
                   }
                 ]
               }).then(() => {
-                // 跳转回主页面
+                // 跳转回任务列表页面
                 router.replaceUrl({
-                  url: 'pages/Index'
+                  url: 'pages/TaskView'
                 }).catch((error: Error) => {
-                  console.error('[TaskReviewView] ❌ 跳转主页失败:', error);
+                  console.error('[TaskReviewView] ❌ 跳转任务列表失败:', error);
                   // 如果跳转失败，尝试返回上一页
                   router.back();
                 });
               }).catch((error: Error) => {
                 console.error('[TaskReviewView] ❌ 显示成功对话框失败:', error);
                 // 如果对话框失败，直接跳转
-                router.replaceUrl({ url: 'pages/Index' }).catch(() => {
+                router.replaceUrl({ url: 'pages/TaskView' }).catch(() => {
                   router.back();
                 });
               });
@@ -562,11 +562,11 @@ struct TaskReviewView {
               console.error('[TaskReviewView] ❌ 处理上传成功逻辑失败:', error);
               // 降级处理：显示Toast并跳转
               promptAction.showToast({
-                message: '上传完成，正在返回主页...',
+                message: '上传完成，正在返回任务列表...',
                 duration: 2000
               });
               setTimeout(() => {
-                router.replaceUrl({ url: 'pages/Index' }).catch(() => {
+                router.replaceUrl({ url: 'pages/TaskView' }).catch(() => {
                   router.back();
                 });
               }, 2000);
