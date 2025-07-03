@@ -883,8 +883,8 @@ struct TaskReviewView {
             .width('100%')
             .margin({ bottom: 24 })
             
-            // 上传按钮
-            if (!this.uploading) {
+            // 上传按钮 - 只有当任务状态为"待上传"时才显示
+            if (!this.uploading && this.taskDetail && this.taskDetail.taskStatus === '待上传') {
               Button('上传巡检记录')
                 .fontSize(16)
                 .fontColor('#ffffff')
