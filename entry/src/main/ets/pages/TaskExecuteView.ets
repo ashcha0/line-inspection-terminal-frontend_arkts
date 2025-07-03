@@ -86,8 +86,6 @@ struct TaskExecuteView {
       this.loadCameras();
       this.startStatusPolling();
       this.startFlawPolling();
-      // 确保任务启动后AGV处于停止状态，等待用户手动控制
-      this.ensureAgvStopped();
       // 移除摄像头轮询，改为手动刷新
       // this.startCameraPolling();
     }
@@ -97,31 +95,7 @@ struct TaskExecuteView {
     this.stopPolling();
   }
 
-  /**
-   * 确保AGV处于停止状态
-   * 解决任务启动时后端自动调用AGV前进的问题
-   */
-  async ensureAgvStopped() {
-    try {
-      console.info('[TaskExecuteView] 🛑 确保AGV处于停止状态');
-      await AgvMovementService.agvStop();
-      console.info('[TaskExecuteView] ✅ AGV已停止，等待用户手动控制');
-      
-      // 显示提示信息
-      setTimeout(() => {
-        try {
-          promptAction.showToast({
-            message: '任务已启动，请手动控制小车前进',
-            duration: 3000
-          });
-        } catch (toastError) {
-          console.warn('[TaskExecuteView] ⚠️ Toast显示失败:', toastError);
-        }
-      }, 1000); // 延迟1秒显示，确保页面已完全加载
-    } catch (error) {
-      console.error('[TaskExecuteView] ❌ 停止AGV失败:', error);
-    }
-  }
+
 
   async loadTaskDetail() {
     try {
@@ -810,8 +784,9 @@ struct TaskExecuteView {
 
         .alignItems(HorizontalAlign.Center)
       } else {
-        // 主要内容
-        Row() {
+        // 主要内容 - 添加滚动功能
+        Scroll() {
+          Row() {
           // 左侧视频区域
           Column() {
             // 摄像头连接状态信息
@@ -1304,8 +1279,15 @@ struct TaskExecuteView {
         .padding(20)
       }
       .width('100%')
-      .layoutWeight(1)
       .alignItems(VerticalAlign.Top)
+        }
+        .scrollable(ScrollDirection.Vertical)
+        .scrollBar(BarState.Auto)
+        .scrollBarColor('#CCCCCC')
+        .scrollBarWidth(6)
+        .edgeEffect(EdgeEffect.Spring)
+        .width('100%')
+        .layoutWeight(1)
     }
 
     // 故障详情模态框
