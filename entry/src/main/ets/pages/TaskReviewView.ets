@@ -79,6 +79,33 @@ struct TaskReviewView {
   @State showRemarkDialog: boolean = false;
   @State editingRemark: string = '';
   @State uploadInfoList: UploadInfo[] = [];
+  
+  // 故障详情对话框控制器
+  flawDetailDialogController: CustomDialogController = new CustomDialogController({
+    builder: FlawDetailDialog({
+      selectedFlaw: $selectedFlaw,
+      getFlawLevelColor: (level: string) => this.getFlawLevelColor(level)
+    }),
+    autoCancel: true,
+    alignment: DialogAlignment.Center,
+    customStyle: true
+  });
+  
+  // 缺陷描述编辑对话框控制器
+  remarkDialogController: CustomDialogController = new CustomDialogController({
+    builder: RemarkEditDialog({
+      editingRemark: $editingRemark,
+      onSave: () => {
+        this.saveRemark();
+      },
+      onCancel: () => {
+        this.closeRemarkDialog();
+      }
+    }),
+    autoCancel: true,
+    alignment: DialogAlignment.Center,
+    customStyle: true
+  });
 
   aboutToAppear() {
     const params = router.getParams() as Record<string, Object>;
@@ -156,36 +183,119 @@ struct TaskReviewView {
   }
 
   // 打开故障详情
-  openFlawDetail(flaw: FlawInfo) {
-    this.selectedFlaw = flaw;
-    this.showFlawDetail = true;
+  async openFlawDetail(flaw: FlawInfo) {
+    try {
+      console.log('[TaskReviewView] 🔍 开始获取故障详情，ID:', flaw.id, '故障名称:', flaw.flawName);
+      
+      // 调用接口获取完整的故障详情
+      const httpRequest = http.createHttp();
+      const response = await httpRequest.request(
+        `${AppConstants.API_BASE_URL}/agv/flaw/${flaw.id}`,
+        {
+          method: http.RequestMethod.GET,
+          header: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('[TaskReviewView] 📡 故障详情请求响应码:', response.responseCode);
+      console.log('[TaskReviewView] 📡 故障详情请求响应内容:', response.result);
+
+      if (response.responseCode === 200) {
+        const data: Record<string, Object> = JSON.parse(response.result as string);
+        console.log('[TaskReviewView] 📊 解析后的响应数据:', JSON.stringify(data));
+        
+        if (data.code === 200) {
+          // 使用接口返回的完整故障信息
+          this.selectedFlaw = data.data as FlawInfo;
+          console.log('[TaskReviewView] 📋 获取到的完整故障详情:', JSON.stringify({
+            id: this.selectedFlaw.id,
+            flawName: this.selectedFlaw.flawName,
+            flawType: this.selectedFlaw.flawType,
+            level: this.selectedFlaw.level,
+            flawDesc: this.selectedFlaw.flawDesc,
+            remark: this.selectedFlaw.remark,
+            flawImageUrl: this.selectedFlaw.flawImageUrl,
+            confirmed: this.selectedFlaw.confirmed,
+            createTime: this.selectedFlaw.createTime,
+            flawDistance: this.selectedFlaw.flawDistance
+          }));
+          
+          // 防止重复弹窗：检查弹窗是否已经打开
+          if (!this.flawDetailDialogController) {
+            console.warn('[TaskReviewView] ⚠️ 故障详情弹窗控制器未初始化');
+            return;
+          }
+          
+          this.flawDetailDialogController.open();
+          console.log('[TaskReviewView] ✅ 故障详情弹窗已打开，ID:', flaw.id);
+          
+          // 显示成功提示
+          promptAction.showToast({
+            message: '故障详情加载成功',
+            duration: 1500
+          });
+        } else {
+          console.error('[TaskReviewView] ❌ 接口返回错误:', data.msg);
+          throw new Error((data.msg as string) || '获取故障详情失败');
+        }
+      } else {
+        console.error('[TaskReviewView] ❌ HTTP请求失败，响应码:', response.responseCode);
+        throw new Error('网络请求失败');
+      }
+    } catch (error) {
+      console.error('[TaskReviewView] ❌ 获取故障详情失败:', error);
+      // 降级处理：使用传入的故障信息，但不重复打开弹窗
+      this.selectedFlaw = flaw;
+      console.log('[TaskReviewView] 🔄 使用基本故障信息显示详情:', JSON.stringify({
+        id: flaw.id,
+        flawName: flaw.flawName,
+        flawType: flaw.flawType,
+        level: flaw.level
+      }));
+      
+      // 只有在成功获取数据时才打开弹窗，避免重复显示
+      // this.flawDetailDialogController.open();
+      // console.log('[TaskReviewView] 🔄 基本故障信息弹窗已打开');
+      
+      promptAction.showToast({
+        message: '获取详细信息失败，请重试',
+        duration: 2000
+      });
+    }
   }
 
   // 关闭故障详情
   closeFlawDetail() {
-    this.showFlawDetail = false;
+    this.flawDetailDialogController.close();
     this.selectedFlaw = null;
   }
 
-  // 打开备注编辑对话框
+  // 打开缺陷描述编辑对话框
   openRemarkDialog(flaw: FlawInfo) {
+    console.log('[TaskReviewView] 📝 打开缺陷描述编辑对话框，ID:', flaw.id);
+    
     this.selectedFlaw = flaw;
-    this.editingRemark = flaw.remark || '';
-    this.showRemarkDialog = true;
+    this.editingRemark = flaw.flawDesc || ''; // 回显当前的缺陷描述
+    this.remarkDialogController.open();
+    console.log('[TaskReviewView] 📝 缺陷描述编辑对话框已打开，当前描述:', this.editingRemark);
   }
 
   // 关闭备注编辑对话框
   closeRemarkDialog() {
-    this.showRemarkDialog = false;
+    this.remarkDialogController.close();
     this.selectedFlaw = null;
     this.editingRemark = '';
   }
 
-  // 保存备注
+  // 保存缺陷描述
   async saveRemark() {
     if (!this.selectedFlaw) return;
 
     try {
+      console.log('[TaskReviewView] 📝 开始保存缺陷描述，ID:', this.selectedFlaw.id);
+      
       const httpRequest = http.createHttp();
       const response = await httpRequest.request(
         `${AppConstants.API_BASE_URL}/agv/flaw`,
@@ -199,10 +309,10 @@ struct TaskReviewView {
             flawName: this.selectedFlaw!.flawName,
             flawType: this.selectedFlaw!.flawType,
             level: this.selectedFlaw!.level,
-            flawDesc: this.selectedFlaw!.flawDesc,
+            flawDesc: this.editingRemark, // 更新缺陷描述
             flawImageUrl: this.selectedFlaw!.flawImageUrl,
             confirmed: this.selectedFlaw!.confirmed,
-            remark: this.editingRemark
+            remark: this.selectedFlaw!.remark // 保持原有备注不变
           })
         }
       );
@@ -210,35 +320,54 @@ struct TaskReviewView {
       if (response.responseCode === 200) {
         const data: Record<string, Object> = JSON.parse(response.result as string);
         if (data.code === 200) {
-          // 更新本地数据
-          const index = this.flaws.findIndex(f => f.id === this.selectedFlaw!.id);
-          if (index !== -1) {
-            this.flaws[index].remark = this.editingRemark;
-          }
-          this.closeRemarkDialog();
-          promptAction.showToast({
-            message: '备注保存成功',
-            duration: 2000
-          });
-          console.log('[TaskReviewView] 备注保存成功');
+          // 在UI线程中更新本地数据
+          setTimeout(() => {
+            try {
+              const index = this.flaws.findIndex(f => f.id === this.selectedFlaw!.id);
+              if (index !== -1) {
+                this.flaws[index].flawDesc = this.editingRemark;
+              }
+              this.selectedFlaw!.flawDesc = this.editingRemark;
+              
+              // 重新加载故障列表以确保数据同步
+              this.loadFlaws();
+              this.closeRemarkDialog();
+              promptAction.showToast({
+                message: '缺陷描述保存成功',
+                duration: 2000
+              });
+              console.log('[TaskReviewView] ✅ 缺陷描述保存成功，ID:', this.selectedFlaw!.id);
+            } catch (uiError) {
+              console.error('[TaskReviewView] ❌ UI更新失败:', uiError);
+            }
+          }, 0);
         } else {
-          throw new Error((data.msg as string) || '保存备注失败');
+          throw new Error((data.msg as string) || '保存缺陷描述失败');
         }
       } else {
         throw new Error('网络请求失败');
       }
     } catch (error) {
-      console.error('[TaskReviewView] 保存备注失败:', error);
-      promptAction.showToast({
-        message: '保存备注失败，请重试',
-        duration: 3000
-      });
+      console.error('[TaskReviewView] ❌ 保存缺陷描述失败:', error);
+      // 在UI线程中显示错误提示
+      setTimeout(() => {
+        try {
+          promptAction.showToast({
+            message: '保存缺陷描述失败，请重试',
+            duration: 3000
+          });
+        } catch (uiError) {
+          console.error('[TaskReviewView] ❌ 显示错误提示失败:', uiError);
+        }
+      }, 0);
     }
   }
 
   // 确认故障
   async confirmFlaw(flaw: FlawInfo) {
     try {
+      console.log('[TaskReviewView] 🔧 开始确认故障，ID:', flaw.id);
+      
       const httpRequest = http.createHttp();
       const response = await httpRequest.request(
         `${AppConstants.API_BASE_URL}/agv/flaw`,
@@ -263,16 +392,40 @@ struct TaskReviewView {
       if (response.responseCode === 200) {
         const data: Record<string, Object> = JSON.parse(response.result as string);
         if (data.code === 200) {
-          // 更新本地数据
-          const index = this.flaws.findIndex(f => f.id === flaw.id);
-          if (index !== -1) {
-            this.flaws[index].confirmed = true;
-          }
-          promptAction.showToast({
-            message: '故障确认成功',
-            duration: 2000
-          });
-          console.log('[TaskReviewView] 故障确认成功，ID:', flaw.id);
+          console.log('[TaskReviewView] ✅ 故障确认API调用成功，ID:', flaw.id);
+          
+          // 使用更长的延迟确保在UI线程中执行
+          setTimeout(async () => {
+            try {
+              // 先更新本地数据
+              const index = this.flaws.findIndex(f => f.id === flaw.id);
+              if (index !== -1) {
+                this.flaws[index].confirmed = true;
+              }
+              
+              // 重新加载故障列表以确保数据同步
+              await this.loadFlaws();
+              
+              // 显示成功提示
+              promptAction.showToast({
+                message: '故障确认成功',
+                duration: 2000
+              });
+              
+              console.log('[TaskReviewView] ✅ 故障确认完成，列表已刷新，ID:', flaw.id);
+            } catch (uiError) {
+              console.error('[TaskReviewView] ❌ UI更新失败:', uiError);
+              // 如果UI更新失败，至少显示成功提示
+              try {
+                promptAction.showToast({
+                  message: '故障确认成功，请手动刷新页面',
+                  duration: 3000
+                });
+              } catch (toastError) {
+                console.error('[TaskReviewView] ❌ 显示提示失败:', toastError);
+              }
+            }
+          }, 100); // 增加延迟时间
         } else {
           throw new Error((data.msg as string) || '确认故障失败');
         }
@@ -280,11 +433,18 @@ struct TaskReviewView {
         throw new Error('网络请求失败');
       }
     } catch (error) {
-      console.error('[TaskReviewView] 确认故障失败:', error);
-      promptAction.showToast({
-        message: '确认故障失败，请重试',
-        duration: 3000
-      });
+      console.error('[TaskReviewView] ❌ 确认故障失败:', error);
+      // 在UI线程中显示错误提示
+      setTimeout(() => {
+        try {
+          promptAction.showToast({
+            message: '确认故障失败，请重试',
+            duration: 3000
+          });
+        } catch (uiError) {
+          console.error('[TaskReviewView] ❌ 显示错误提示失败:', uiError);
+        }
+      }, 0);
     }
   }
 
@@ -368,11 +528,50 @@ struct TaskReviewView {
             this.taskDetail.taskStatus = '已完成';
           }
 
-          promptAction.showToast({
-            message: '上传完成',
-            duration: 2000
-          });
-          console.log('[TaskReviewView] 上传完成');
+          console.log('[TaskReviewView] ✅ 上传完成');
+          
+          // 显示成功对话框并跳转
+          setTimeout(() => {
+            try {
+              promptAction.showDialog({
+                title: '上传成功',
+                message: '巡检记录已成功上传，任务已完成！',
+                buttons: [
+                  {
+                    text: '确定',
+                    color: AppConstants.COLORS.PRIMARY
+                  }
+                ]
+              }).then(() => {
+                // 跳转回主页面
+                router.replaceUrl({
+                  url: 'pages/Index'
+                }).catch((error: Error) => {
+                  console.error('[TaskReviewView] ❌ 跳转主页失败:', error);
+                  // 如果跳转失败，尝试返回上一页
+                  router.back();
+                });
+              }).catch((error: Error) => {
+                console.error('[TaskReviewView] ❌ 显示成功对话框失败:', error);
+                // 如果对话框失败，直接跳转
+                router.replaceUrl({ url: 'pages/Index' }).catch(() => {
+                  router.back();
+                });
+              });
+            } catch (error) {
+              console.error('[TaskReviewView] ❌ 处理上传成功逻辑失败:', error);
+              // 降级处理：显示Toast并跳转
+              promptAction.showToast({
+                message: '上传完成，正在返回主页...',
+                duration: 2000
+              });
+              setTimeout(() => {
+                router.replaceUrl({ url: 'pages/Index' }).catch(() => {
+                  router.back();
+                });
+              }, 2000);
+            }
+          }, 100);
         } else {
           throw new Error((data.msg as string) || '上传失败');
         }
@@ -645,7 +844,7 @@ struct TaskReviewView {
                           this.openFlawDetail(flaw);
                         })
                       
-                      Button('添加备注')
+                      Button('编辑描述')
                         .fontSize(12)
                         .fontColor(AppConstants.COLORS.WARNING)
                         .backgroundColor('transparent')
@@ -745,31 +944,39 @@ struct TaskReviewView {
     }
     .width('100%')
     .height('100%')
-    .bindSheet(this.showFlawDetail, this.buildFlawDetailSheet(), {
-      height: '80%',
-      showClose: true,
-      onDisappear: () => {
-        this.closeFlawDetail();
-      }
-    })
-    .bindSheet(this.showRemarkDialog, this.buildRemarkDialog(), {
-      height: '60%',
-      showClose: true,
-      onDisappear: () => {
-        this.closeRemarkDialog();
-      }
-    })
   }
 
-  // 故障详情弹窗
-  @Builder
-  buildFlawDetailSheet() {
+}
+
+// 故障详情对话框组件
+@CustomDialog
+struct FlawDetailDialog {
+  @Link selectedFlaw: FlawInfo | null;
+  getFlawLevelColor: (level: string) => string = () => AppConstants.COLORS.TEXT_PRIMARY;
+  controller: CustomDialogController = new CustomDialogController({builder: FlawDetailDialog()});
+
+  build() {
     Column() {
-      Text('故障详情')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
-        .margin({ bottom: 20 })
+      // 标题栏
+      Row() {
+        Text('故障详情')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+          .layoutWeight(1)
+        
+        Button('×')
+          .fontSize(20)
+          .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+          .backgroundColor('transparent')
+          .width(32)
+          .height(32)
+          .onClick(() => {
+            this.controller.close();
+          })
+      }
+      .width('100%')
+      .margin({ bottom: 20 })
       
       if (this.selectedFlaw) {
         Scroll() {
@@ -824,9 +1031,103 @@ struct TaskReviewView {
                   .fontColor(AppConstants.COLORS.TEXT_REGULAR)
                   .width(80)
                 
-                Text(this.selectedFlaw.flawDesc)
+                Text(this.selectedFlaw.flawDesc || '暂无描述')
                   .fontSize(14)
                   .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+                  .layoutWeight(1)
+              }
+              .width('100%')
+              .margin({ bottom: 8 })
+              
+              if (this.selectedFlaw.flawDistance !== undefined) {
+                Row() {
+                  Text('故障距离:')
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                    .width(80)
+                  
+                  Text(`${this.selectedFlaw.flawDistance}m`)
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+                    .layoutWeight(1)
+                }
+                .width('100%')
+                .margin({ bottom: 8 })
+              }
+              
+              if (this.selectedFlaw.flawLength !== undefined) {
+                Row() {
+                  Text('故障长度:')
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                    .width(80)
+                  
+                  Text(`${this.selectedFlaw.flawLength}m`)
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+                    .layoutWeight(1)
+                }
+                .width('100%')
+                .margin({ bottom: 8 })
+              }
+              
+              if (this.selectedFlaw.flawArea !== undefined) {
+                Row() {
+                  Text('故障面积:')
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                    .width(80)
+                  
+                  Text(`${this.selectedFlaw.flawArea}㎡`)
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+                    .layoutWeight(1)
+                }
+                .width('100%')
+                .margin({ bottom: 8 })
+              }
+              
+              if (this.selectedFlaw.countNum !== undefined) {
+                Row() {
+                  Text('故障数量:')
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                    .width(80)
+                  
+                  Text(`${this.selectedFlaw.countNum}个`)
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+                    .layoutWeight(1)
+                }
+                .width('100%')
+                .margin({ bottom: 8 })
+              }
+              
+              if (this.selectedFlaw.createTime) {
+                Row() {
+                  Text('发现时间:')
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                    .width(80)
+                  
+                  Text(this.selectedFlaw.createTime)
+                    .fontSize(14)
+                    .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+                    .layoutWeight(1)
+                }
+                .width('100%')
+                .margin({ bottom: 8 })
+              }
+              
+              Row() {
+                Text('确认状态:')
+                  .fontSize(14)
+                  .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+                  .width(80)
+                
+                Text(this.selectedFlaw.confirmed ? '已确认' : '待确认')
+                  .fontSize(14)
+                  .fontColor(this.selectedFlaw.confirmed ? AppConstants.COLORS.SUCCESS : AppConstants.COLORS.WARNING)
                   .layoutWeight(1)
               }
               .width('100%')
@@ -879,23 +1180,46 @@ struct TaskReviewView {
         .layoutWeight(1)
       }
     }
-    .width('100%')
-    .height('100%')
+    .width('90%')
+    .height('80%')
     .padding(20)
     .backgroundColor(AppConstants.COLORS.BACKGROUND_BASE)
+    .borderRadius(12)
   }
+}
 
-  // 备注编辑对话框
-  @Builder
-  buildRemarkDialog() {
+// 缺陷描述编辑对话框组件
+@CustomDialog
+struct RemarkEditDialog {
+  @Link editingRemark: string;
+  onSave: () => void = () => {};
+  onCancel: () => void = () => {};
+  controller: CustomDialogController = new CustomDialogController({builder: RemarkEditDialog()});
+
+  build() {
     Column() {
-      Text('添加备注')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
-        .margin({ bottom: 20 })
+      // 标题栏
+      Row() {
+        Text('编辑缺陷描述')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+          .layoutWeight(1)
+        
+        Button('×')
+          .fontSize(20)
+          .fontColor(AppConstants.COLORS.TEXT_REGULAR)
+          .backgroundColor('transparent')
+          .width(32)
+          .height(32)
+          .onClick(() => {
+            this.onCancel();
+          })
+      }
+      .width('100%')
+      .margin({ bottom: 20 })
       
-      TextArea({ placeholder: '请输入备注信息...', text: this.editingRemark })
+      TextArea({ placeholder: '请输入缺陷描述...', text: this.editingRemark })
         .width('100%')
         .height(120)
         .fontSize(14)
@@ -916,7 +1240,7 @@ struct TaskReviewView {
           .width('48%')
           .height(44)
           .onClick(() => {
-            this.closeRemarkDialog();
+            this.onCancel();
           })
         
         Button('保存')
@@ -927,15 +1251,15 @@ struct TaskReviewView {
           .width('48%')
           .height(44)
           .onClick(() => {
-            this.saveRemark();
+            this.onSave();
           })
       }
       .width('100%')
       .justifyContent(FlexAlign.SpaceBetween)
     }
-    .width('100%')
-    .height('100%')
+    .width('90%')
     .padding(20)
     .backgroundColor(AppConstants.COLORS.BACKGROUND_BASE)
+    .borderRadius(12)
   }
 }
