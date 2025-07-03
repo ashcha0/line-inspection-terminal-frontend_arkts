@@ -743,7 +743,8 @@ struct TaskView {
   }
 
   build() {
-    Column() {
+    Stack() {
+      Column() {
       // 页面标题
       Row() {
         Button('← 返回')
@@ -1126,7 +1127,23 @@ struct TaskView {
                         .backgroundColor(AppConstants.COLORS.PRIMARY)
                         .border({ width: 1, color: AppConstants.COLORS.PRIMARY })
                         .onClick(() => this.uploadTask(task.id))
+                      
+                      Button('删除')
+                        .fontSize(12)
+                        .fontColor('#ffffff')
+                        .backgroundColor('#f56c6c')
+                        .border({ width: 1, color: '#f56c6c' })
+                        .margin({ left: 5 })
+                        .onClick(() => this.deleteTask(task.id))
                     }
+                    
+                    Button('查看')
+                      .fontSize(12)
+                      .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
+                      .backgroundColor('#ffffff')
+                      .border({ width: 1, color: '#dddddd' })
+                      .margin({ left: 5 })
+                      .onClick(() => this.viewTaskDetail(task.id))
                   } else {
                     Button('查看')
                       .fontSize(12)
@@ -1134,6 +1151,14 @@ struct TaskView {
                       .backgroundColor('#ffffff')
                       .border({ width: 1, color: '#dddddd' })
                       .onClick(() => this.viewTaskDetail(task.id))
+                    
+                    Button('删除')
+                      .fontSize(12)
+                      .fontColor('#ffffff')
+                      .backgroundColor('#f56c6c')
+                      .border({ width: 1, color: '#f56c6c' })
+                      .margin({ left: 5 })
+                      .onClick(() => this.deleteTask(task.id))
                   }
                 }
                 .width(200)
@@ -1153,9 +1178,13 @@ struct TaskView {
         .borderRadius(8)
         .margin({ left: 20, right: 20, bottom: 20 })
       }
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(AppConstants.COLORS.BACKGROUND_BASE)
 
-      // 新增任务模态框
-      if (this.showAddTask) {
+    // 新增任务模态框
+    if (this.showAddTask) {
         Stack() {
           Column() {
             // 模态框标题
@@ -1327,8 +1356,11 @@ struct TaskView {
           .shadow({ radius: 12, color: 'rgba(0,0,0,0.2)', offsetX: 0, offsetY: 4 })
         }
         .width('100%')
-         .height('100%')
-         .backgroundColor('rgba(0,0,0,0.5)')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .alignContent(Alignment.Center)
+         .position({ x: 0, y: 0 })
+         .zIndex(1000)
          .onClick(() => this.closeAddTask())
       }
       
@@ -1378,10 +1410,11 @@ struct TaskView {
         .height('100%')
         .backgroundColor('rgba(0,0,0,0.5)')
         .alignContent(Alignment.Center)
+        .position({ x: 0, y: 0 })
+        .zIndex(1000)
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(AppConstants.COLORS.BACKGROUND_BASE)
   }
 }
