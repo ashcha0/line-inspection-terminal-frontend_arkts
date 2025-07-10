@@ -623,92 +623,14 @@ struct TaskView {
     }
   }
 
-  async uploadTask(taskId: number) {
-    try {
-      console.info('[TaskView] 📤 开始上传任务数据，ID:', taskId);
-      
-      // 添加到上传中的任务集合
-      this.uploadingTasks.add(taskId);
-      this.currentUploadTaskId = taskId;
-      this.uploadProgress = 0;
-      this.showUploadProgress = true;
-      
-      // 模拟上传进度
-      const progressInterval = setInterval(() => {
-        if (this.uploadProgress < 90) {
-          this.uploadProgress += 10;
-        }
-      }, 200);
-      
-      const response = await TaskService.uploadTask(taskId);
-      
-      // 清除进度定时器
-      clearInterval(progressInterval);
-      this.uploadProgress = 100;
-      
-      interface ResponseWithCode {
-        code: number;
-        msg?: string;
-      }
-      const responseWithCode = response as ResponseWithCode;
-      
-      if (responseWithCode.code === 200) {
-        console.info('[TaskView] ✅ 任务数据上传成功');
-        
-        // 延迟关闭进度条，让用户看到100%
-        setTimeout(() => {
-          this.showUploadProgress = false;
-          this.uploadProgress = 0;
-          this.currentUploadTaskId = 0;
-        }, 1000);
-        
-        promptAction.showToast({
-          message: '任务数据上传成功',
-          duration: 2000
-        });
-        
-        // 刷新任务列表以获取最新状态
-        try {
-          await this.loadTasks();
-          console.info('[TaskView] 🔄 任务列表刷新完成');
-        } catch (refreshError) {
-          console.error('[TaskView] ❌ 刷新任务列表失败:', refreshError);
-        }
-        
-      } else {
-        console.error('[TaskView] ❌ 任务数据上传失败，错误码:', responseWithCode.code, '错误信息:', responseWithCode.msg);
-        this.showUploadProgress = false;
-        this.uploadProgress = 0;
-        this.currentUploadTaskId = 0;
-        
-        promptAction.showToast({
-          message: responseWithCode.msg || '上传任务数据失败',
-          duration: 2000
-        });
-      }
-      
-    } catch (error) {
-      console.error('[TaskView] ❌ 上传任务数据异常:', error);
-      this.showUploadProgress = false;
-      this.uploadProgress = 0;
-      this.currentUploadTaskId = 0;
-      
-      promptAction.showToast({
-        message: '上传任务数据失败，请重试',
-        duration: 2000
-      });
-    } finally {
-      // 从上传中的任务集合中移除
-      this.uploadingTasks.delete(taskId);
-    }
-  }
+  // 移除uploadTask方法，上传功能已改为跳转到TaskReviewView页面
 
+  // 移除TaskDetailView页面跳转功能
   viewTaskDetail(taskId: number) {
-    router.pushUrl({
-      url: 'pages/TaskDetailView',
-      params: {
-        taskId: taskId
-      }
+    // TaskDetailView页面已删除，此功能不再可用
+    promptAction.showToast({
+      message: '详情查看功能已移除',
+      duration: 2000
     });
   }
 
@@ -1024,7 +946,13 @@ struct TaskView {
                   .width(120)
                   .textAlign(TextAlign.Center)
                   .decoration({ type: TextDecorationType.Underline })
-                  .onClick(() => this.viewTaskDetail(task.id))
+                  .onClick(() => {
+                    // 移除TaskDetailView跳转，改为提示
+                    promptAction.showToast({
+                      message: '详情查看功能已移除',
+                      duration: 2000
+                    });
+                  })
                 
                 Text(task.taskName)
                   .fontSize(14)
@@ -1111,7 +1039,13 @@ struct TaskView {
                       .backgroundColor('#ffffff')
                       .border({ width: 1, color: '#dddddd' })
                       .margin({ left: 5 })
-                      .onClick(() => this.viewTaskDetail(task.id))
+                      .onClick(() => {
+                        // 移除TaskDetailView跳转
+                        promptAction.showToast({
+                          message: '详情查看功能已移除',
+                          duration: 2000
+                        });
+                      })
                   } else if (task.taskStatus === AppConstants.TASK_STATUS.UPLOADING) {
                     if (this.uploadingTasks.has(task.id)) {
                       Button('上传中...')
@@ -1126,7 +1060,15 @@ struct TaskView {
                         .fontColor('#ffffff')
                         .backgroundColor(AppConstants.COLORS.PRIMARY)
                         .border({ width: 1, color: AppConstants.COLORS.PRIMARY })
-                        .onClick(() => this.uploadTask(task.id))
+                        .onClick(() => {
+                          // 跳转到TaskReviewView页面进行复盘后上传
+                          router.pushUrl({
+                            url: 'pages/TaskReviewView',
+                            params: {
+                              taskId: task.id
+                            }
+                          });
+                        })
                       
                       Button('删除')
                         .fontSize(12)
@@ -1143,14 +1085,26 @@ struct TaskView {
                       .backgroundColor('#ffffff')
                       .border({ width: 1, color: '#dddddd' })
                       .margin({ left: 5 })
-                      .onClick(() => this.viewTaskDetail(task.id))
+                      .onClick(() => {
+                        // 移除TaskDetailView跳转
+                        promptAction.showToast({
+                          message: '详情查看功能已移除',
+                          duration: 2000
+                        });
+                      })
                   } else {
                     Button('查看')
                       .fontSize(12)
                       .fontColor(AppConstants.COLORS.TEXT_PRIMARY)
                       .backgroundColor('#ffffff')
                       .border({ width: 1, color: '#dddddd' })
-                      .onClick(() => this.viewTaskDetail(task.id))
+                      .onClick(() => {
+                        // 移除TaskDetailView跳转
+                        promptAction.showToast({
+                          message: '详情查看功能已移除',
+                          duration: 2000
+                        });
+                      })
                     
                     Button('删除')
                       .fontSize(12)

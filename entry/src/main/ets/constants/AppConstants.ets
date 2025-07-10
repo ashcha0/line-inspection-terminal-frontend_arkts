@@ -9,7 +9,6 @@ interface ApiEndpoints {
 interface Routes {
   INIT: string;
   TASK_LIST: string;
-  TASK_DETAIL: string;
   TASK_EXECUTE: string;
   SETTINGS: string;
   TASK_REVIEW: string;
@@ -88,7 +87,7 @@ export class AppConstants {
   static readonly ROUTES: Routes = {
     INIT: 'pages/InitView',
     TASK_LIST: 'pages/TaskView',
-    TASK_DETAIL: 'pages/TaskDetailView',
+
     TASK_EXECUTE: 'pages/TaskExecuteView',
     SETTINGS: 'pages/SettingsView',
     TASK_REVIEW: 'pages/TaskReviewView'
